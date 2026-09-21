@@ -1,0 +1,25 @@
+# SentinelDR Phone Secondary Node — Requirements
+# 
+# This file is intentionally minimal.
+# The phone server uses Python standard library only.
+#
+# NO packages required.
+# NO pip installs needed.
+# NO native compilation needed.
+#
+# Python standard library modules used:
+#   http.server   — HTTP server
+#   sqlite3       — local storage
+#   socket        — UDP discovery
+#   urllib        — HTTP client for heartbeat
+#   threading     — background services
+#   json          — serialization
+#   hashlib       — checksums
+#   logging       — structured logging
+#   pathlib       — file paths
+#   time          — timing
+#   uuid          — unique IDs
+#   os            — environment variables
+#
+# Minimum Python version: 3.9
+# Tested on: Android Termux Python 3.11

@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dharshini J - Portfolio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 80px 0;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        
+        .hero .subtitle {
+            font-size: 1.4rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        
+        .tags {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .tag {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            display: block;
+        }
+        
+        .stat-label {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+        
+        section {
+            padding: 80px 0;
+        }
+        
+        .section-title {
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 3rem;
+            color: #2c3e50;
+        }
+        
+        .about-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+        
+        .about-text {
+            font-size: 1.1rem;
+            line-height: 1.8;
+        }
+        
+        .skills-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+        
+        .skill-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .skill-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+        
+        .skill-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .skill-tag {
+            background: #f1f3f4;
+            padding: 0.3rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            color: #5f6368;
+        }
+        
+        .experience-item {
+            background: white;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .experience-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+        
+        .job-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .company {
+            font-size: 1.2rem;
+            color: #667eea;
+            font-weight: 500;
+        }
+        
+        .date-location {
+            text-align: right;
+            color: #666;
+        }
+        
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 2rem;
+        }
+        
+        .project-card {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .project-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .project-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+        }
+        
+        .project-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        
+        .project-type {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        
+        .project-body {
+            padding: 1.5rem;
+        }
+        
+        .project-description {
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+        
+        .tech-flow {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 1rem 0;
+            font-weight: 500;
+            color: #667eea;
+        }
+        
+        .education-item {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .degree {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 0.5rem;
+        }
+        
+        .school {
+            font-size: 1.1rem;
+            color: #667eea;
+            margin-bottom: 1rem;
+        }
+        
+        .education-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        
+        .contact {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .contact-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+        }
+        
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-bottom: 1rem;
+            text-decoration: none;
+            color: white;
+            transition: background 0.3s ease;
+        }
+        
+        .contact-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 500;
+            transition: background 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #5a6fd8;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        footer {
+            background: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+        }
+        
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+            
+            .about-grid,
+            .contact-grid {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+            }
+            
+            .experience-header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .date-location {
+                text-align: left;
+                margin-top: 0.5rem;
+            }
+            
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="hero">
+                <h1>Dharshini J</h1>
+                <div class="subtitle">Open to Internships & Entry-Level Roles</div>
+                <div class="tags">
+                    <span class="tag">Frontend Dev</span>
+                    <span class="tag">Backend Eng</span>
+                    <span class="tag">Cloud</span>
+                    <span class="tag">Cybersecurity</span>
+                </div>
+                <p>BCA student building real-world systems — polished interfaces, robust APIs, and cloud infrastructure — driven by a security-first mindset toward a career as a DevSecOps Engineer.</p>
+                
+                <div class="stats">
+                    <div class="stat">
+                        <span class="stat-number">2+</span>
+                        <span class="stat-label">Internships</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">3+</span>
+                        <span class="stat-label">Projects Built</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">8.8/10</span>
+                        <span class="stat-label">Current GPA</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">96%</span>
+                        <span class="stat-label">Pre-University Score</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <section id="about">
+        <div class="container">
+            <h2 class="section-title">About Me</h2>
+            <div class="about-grid">
+                <div class="about-text">
+                    <h3>Crafting Software Across the Full Stack</h3>
+                    <p>I'm a BCA student at SSMRV College, Bengaluru building production-grade systems through internships and academic projects. My work spans modern frontend interfaces, scalable backend APIs, and cloud infrastructure.</p>
+                    <p>At Infosys Springboard, I engineered a complete SaaS billing platform — React dashboard, FastAPI backend, PostgreSQL database, and automated financial workflows. At Corizo, I performed real vulnerability assessments and penetration testing.</p>
+                    <p><strong>My goal: DevSecOps Engineer</strong> — where development, operations, and security work as one.</p>
+                </div>
+                <div class="skills-overview">
+                    <div class="skill-card">
+                        <h3>⚛️ Frontend Development</h3>
+                        <p>React, JS, HTML/CSS — building polished, responsive UIs that recruiters remember</p>
+                    </div>
+                    <div class="skill-card">
+                        <h3>⚙️ Backend Engineering</h3>
+                        <p>FastAPI, Node.js, REST APIs, JWT auth, SQLAlchemy, webhook workflows</p>
+                    </div>
+                    <div class="skill-card">
+                        <h3>☁️ Cloud & DevOps</h3>
+                        <p>AWS, Azure, Docker — deploying and managing production infrastructure</p>
+                    </div>
+                    <div class="skill-card">
+                        <h3>🔐 Cybersecurity</h3>
+                        <p>Vulnerability assessments, Nmap scanning, penetration testing, security reporting</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="skills">
+        <div class="container">
+            <h2 class="section-title">Technical Skills</h2>
+            <p style="text-align: center; margin-bottom: 3rem; font-size: 1.1rem;">Technologies I've used across real internships and projects — grouped by domain.</p>
+            <div class="skills-grid">
+                <div class="skill-card">
+                    <h3>⚛️ Frontend Development</h3>
+                    <div class="skill-tags">
+                        <span class="skill-tag">React</span>
+                        <span class="skill-tag">JavaScript</span>
+                        <span class="skill-tag">HTML5</span>
+                        <span class="skill-tag">CSS3</span>
+                        <span class="skill-tag">Recharts</span>
+                        <span class="skill-tag">Vite</span>
+                        <span class="skill-tag">Responsive Design</span>
+                    </div>
+                </div>
+                <div class="skill-card">
+                    <h3>🔧 Backend Development</h3>
+                    <div class="skill-tags">
+                        <span class="skill-tag">FastAPI</span>
+                        <span class="skill-tag">Node.js</span>
+                        <span class="skill-tag">Express.js</span>
+                        <span class="skill-tag">Python</span>
+                        <span class="skill-tag">REST APIs</span>
+                        <span class="skill-tag">SQLAlchemy</span>
+                        <span class="skill-tag">JWT Auth</span>
+                    </div>
+                </div>
+                <div class="skill-card">
+                    <h3>☁️ Cloud & DevOps</h3>
+                    <div class="skill-tags">
+                        <span class="skill-tag">AWS</span>
+                        <span class="skill-tag">Azure</span>
+                        <span class="skill-tag">Docker</span>
+                        <span class="skill-tag">Linux</span>
+                        <span class="skill-tag">Git</span>
+                        <span class="skill-tag">GitHub</span>
+                    </div>
+                </div>
+                <div class="skill-card">
+                    <h3>🗄️ Databases</h3>
+                    <div class="skill-tags">
+                        <span class="skill-tag">PostgreSQL</span>
+                        <span class="skill-tag">MongoDB</span>
+                        <span class="skill-tag">MySQL</span>
+                        <span class="skill-tag">SQL</span>
+                    </div>
+                </div>
+                <div class="skill-card">
+                    <h3>🔒 Cybersecurity</h3>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Vulnerability Assessment</span>
+                        <span class="skill-tag">Nmap</span>
+                        <span class="skill-tag">Port Scanning</span>
+                        <span class="skill-tag">Network Security</span>
+                        <span class="skill-tag">Pen Testing</span>
+                    </div>
+                </div>
+                <div class="skill-card">
+                    <h3>💻 Languages & Auth</h3>
+                    <div class="skill-tags">
+                        <span class="skill-tag">Python</span>
+                        <span class="skill-tag">Java</span>
+                        <span class="skill-tag">SQL</span>
+                        <span class="skill-tag">bcrypt</span>
+                        <span class="skill-tag">Google OAuth 2.0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="experience">
+        <div class="container">
+            <h2 class="section-title">Professional Experience</h2>
+            <div class="experience-item">
+                <div class="experience-header">
+                    <div>
+                        <div class="job-title">Python Technology Stack Intern</div>
+                        <div class="company">Infosys Springboard</div>
+                    </div>
+                    <div class="date-location">
+                        Jul 2026 – Aug 2026<br>
+                        Remote · Bengaluru, Karnataka
+                    </div>
+                </div>
+                <ul>
+                    <li>Built a SaaS subscription billing platform using Python, FastAPI, PostgreSQL, and SQLAlchemy — covering plans, customers, payments, refunds, and subscriptions end-to-end.</li>
+                    <li>Engineered financial logic for proration, GST/VAT, MRR, churn, trial conversion, webhook-based payment workflows, and automated dunning.</li>
+                    <li>Developed a React.js admin dashboard with Recharts for real-time billing analytics, integrating JWT auth, REST APIs, and ReportLab for dynamic invoice generation.</li>
+                </ul>
+                <div class="skill-tags">
+                    <span class="skill-tag">Python</span>
+                    <span class="skill-tag">FastAPI</span>
+                    <span class="skill-tag">PostgreSQL</span>
+                    <span class="skill-tag">React.js</span>
+                    <span class="skill-tag">JWT</span>
+                </div>
+            </div>
+
+            <div class="experience-item">
+                <div class="experience-header">
+                    <div>
+                        <div class="job-title">Cybersecurity Intern</div>
+                        <div class="company">Corizo</div>
+                    </div>
+                    <div class="date-location">
+                        Feb 2026 – Mar 2026<br>
+                        Remote · Bengaluru, Karnataka
+                    </div>
+                </div>
+                <ul>
+                    <li>Performed vulnerability assessments using Nmap and security scanning tools to identify open ports, active services, and potential security weaknesses.</li>
+                    <li>Conducted port scanning, network scanning, and vulnerability analysis to evaluate network security posture and map exposed attack surfaces.</li>
+                    <li>Executed basic penetration tests and produced structured security reports with vulnerability findings, risk ratings, and mitigation recommendations.</li>
+                </ul>
+                <div class="skill-tags">
+                    <span class="skill-tag">Nmap</span>
+                    <span class="skill-tag">Vulnerability Assessment</span>
+                    <span class="skill-tag">Network Scanning</span>
+                    <span class="skill-tag">Pen Testing</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="projects">
+        <div class="container">
+            <h2 class="section-title">Technical Projects</h2>
+            <div class="projects-grid">
+                <div class="project-card">
+                    <div class="project-header">
+                        <div class="project-title">SentinelDR — Disaster Recovery System</div>
+                        <div class="project-type">Capstone</div>
+                    </div>
+                    <div class="project-body">
+                        <div class="project-description">
+                            A two-node high-availability disaster recovery prototype that automates failover and failback between a primary server and a standby node — with a real-time React monitoring dashboard and 3-second heartbeat detection.
+                        </div>
+                        <ul>
+                            <li>2-node DR system with automated failover and failback using Python and FastAPI</li>
+                            <li>3-second heartbeat and synchronization via REST APIs for automated failure detection</li>
+                            <li>React + Vite dashboard monitoring nodes, metrics, uptime, sync status, and failover state</li>
+                        </ul>
+                        <div class="tech-flow">
+                            React + Vite → FastAPI + Python → PostgreSQL
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-header">
+                        <div class="project-title">BillingPro — SaaS Billing Platform</div>
+                        <div class="project-type">Internship</div>
+                    </div>
+                    <div class="project-body">
+                        <div class="project-description">
+                            Full subscription billing and revenue automation platform — from plan management to dynamic invoice generation — built at Infosys Springboard.
+                        </div>
+                        <ul>
+                            <li>Proration, GST/VAT, MRR, churn, trial conversion</li>
+                            <li>Webhook-driven payment workflows & dunning</li>
+                            <li>React dashboard with JWT auth & Recharts analytics</li>
+                        </ul>
+                        <div class="tech-flow">
+                            React.js + Recharts → FastAPI + Python → PostgreSQL
+                        </div>
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-header">
+                        <div class="project-title">Aura Resume — ATS Builder</div>
+                        <div class="project-type">Personal</div>
+                    </div>
+                    <div class="project-body">
+                        <div class="project-description">
+                            An ATS-optimized resume builder with a custom scoring engine, multi-provider authentication (JWT + Google OAuth 2.0), and RESTful API architecture. Deployed on Render.
+                        </div>
+                        <ul>
+                            <li>ATS scoring engine and RESTful APIs for resume analysis</li>
+                            <li>JWT, bcrypt, Google OAuth 2.0 via Passport.js</li>
+                            <li>Deployed live on Render with MongoDB backend</li>
+                        </ul>
+                        <div class="tech-flow">
+                            JavaScript → Node.js + Express + Passport.js → MongoDB → Render
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="education">
+        <div class="container">
+            <h2 class="section-title">Education</h2>
+            <div class="education-item">
+                <div class="degree">Bachelor of Computer Application (BCA)</div>
+                <div class="school">SSMRV College, Bengaluru</div>
+                <div class="education-details">
+                    <div>
+                        <strong>Expected Graduation:</strong> June 2027
+                    </div>
+                    <div>
+                        <strong>Current GPA:</strong> 8.8 / 10
+                    </div>
+                    <div>
+                        <strong>Key Subjects:</strong> DBMS, Computer Networks, Operating Systems
+                    </div>
+                </div>
+            </div>
+
+            <div class="education-item">
+                <div class="degree">Pre-University — Commerce with Computer Science</div>
+                <div class="school">SFS College, Bengaluru</div>
+                <div class="education-details">
+                    <div>
+                        <strong>Graduation:</strong> March 2024
+                    </div>
+                    <div>
+                        <strong>Aggregate Score:</strong> 96.16%
+                    </div>
+                    <div>
+                        <strong>Subjects:</strong> Commerce, Computer Science
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2 class="section-title">Get In Touch</h2>
+            <div class="contact-grid">
+                <div>
+                    <h3>Let's Work Together</h3>
+                    <p>Open to internships, entry-level roles, and collaborations in software development, cloud engineering, and DevSecOps. Feel free to reach out.</p>
+                </div>
+                <div>
+                    <a href="mailto:dharshinijofficial@gmail.com" class="contact-item">
+                        <span>✉️</span>
+                        <div>
+                            <strong>Email</strong><br>
+                            dharshinijofficial@gmail.com
+                        </div>
+                    </a>
+                    <a href="https://linkedin.com/in/dharshinijreddy" class="contact-item" target="_blank">
+                        <span>💼</span>
+                        <div>
+                            <strong>LinkedIn</strong><br>
+                            linkedin.com/in/dharshinijreddy
+                        </div>
+                    </a>
+                    <a href="https://github.com/Dharshini814" class="contact-item" target="_blank">
+                        <span>🔭</span>
+                        <div>
+                            <strong>GitHub</strong><br>
+                            github.com/Dharshini814
+                        </div>
+                    </a>
+                    <div class="contact-item">
+                        <span>📍</span>
+                        <div>
+                            <strong>Location</strong><br>
+                            Bengaluru, Karnataka, India
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>Designed & built by Dharshini J · Bengaluru · 2026</p>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# SentinelDR Laptop Primary Node — Requirements
+# Stable package versions for Windows Python 3.11+
+
+# Web framework and ASGI server
+fastapi>=0.104.0         # Modern async web framework for REST APIs
+uvicorn[standard]>=0.24.0  # ASGI server with WebSocket support
+
+# Database ORM and driver
+sqlalchemy>=2.0.0        # Modern async ORM with type support
+psycopg[binary]>=3.1.0   # PostgreSQL driver with binary wheels
+
+# Data validation and settings
+pydantic>=2.5.0          # Type validation and serialization
+pydantic-settings>=2.1.0 # Environment variable configuration
+python-dotenv>=1.0.0     # .env file loading
+
+# HTTP client libraries
+requests>=2.31.0         # Synchronous HTTP client for external APIs
+httpx>=0.25.0            # Async HTTP client for peer communication
