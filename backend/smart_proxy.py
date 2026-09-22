@@ -20,7 +20,7 @@ class SentinelDRSmartProxy:
     def __init__(self):
         # Server endpoints
         self.laptop_url = "http://localhost:8000"
-        self.phone_url = "http://localhost:8001"
+        self.phone_url = "http://localhost:8001"  # Will be dynamically discovered
         
         # Health monitoring
         self.health_check_interval = 3  # Match SentinelDR heartbeat interval
@@ -28,6 +28,8 @@ class SentinelDRSmartProxy:
         self.phone_healthy = True
         self.last_laptop_check = 0
         self.last_phone_check = 0
+        self.last_phone_discovery = 0
+        self.phone_discovery_interval = 10  # Discover phone location every 10 seconds
         
         # State tracking
         self.active_server = "laptop"  # laptop | phone
@@ -44,6 +46,11 @@ class SentinelDRSmartProxy:
     async def check_server_health(self, server_url: str, server_name: str) -> bool:
         """Check if a server is healthy using SentinelDR health endpoint."""
         try:
+            # If checking phone server, try to discover its current location first
+            if server_name == "phone":
+                await self.discover_phone_server_if_needed()
+                server_url = self.phone_url
+            
             timeout = ClientTimeout(total=2)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(f"{server_url}/health") as response:
@@ -55,6 +62,27 @@ class SentinelDRSmartProxy:
         except Exception as e:
             logger.debug(f"[HEALTH] {server_name} health check failed: {e}")
         return False
+
+    async def discover_phone_server_if_needed(self):
+        """Discover phone server location if needed"""
+        current_time = time.time()
+        if current_time - self.last_phone_discovery > self.phone_discovery_interval:
+            try:
+                timeout = ClientTimeout(total=3)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(f"{self.laptop_url}/phone-server-url", 
+                                         headers={"X-API-Key": "my-project-final"}) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            if data.get('phone_server_url') and data.get('status') == 'discovered':
+                                new_phone_url = data['phone_server_url']
+                                if self.phone_url != new_phone_url:
+                                    logger.info(f"📱 Phone server discovered at: {new_phone_url} (was: {self.phone_url})")
+                                    self.phone_url = new_phone_url
+            except Exception as e:
+                logger.debug(f"Phone discovery failed: {e}")
+            
+            self.last_phone_discovery = current_time
     
     async def determine_active_server(self) -> str:
         """Determine which server should be active based on SentinelDR state."""
