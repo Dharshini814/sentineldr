@@ -223,13 +223,13 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
             self._send_error(500, "Failed to serve portfolio")
     
     def _get_embedded_portfolio(self):
-        """Return embedded portfolio HTML for failover scenarios."""
+        """Return simple portfolio HTML for failover scenarios."""
         return '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SentinelDR - Emergency Portfolio</title>
+    <title>Dharshini J - Portfolio</title>
     <style>
         body { 
             font-family: Arial, sans-serif; 
@@ -240,105 +240,54 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
             min-height: 100vh;
         }
         .container { 
-            max-width: 800px; 
+            max-width: 1000px; 
             margin: 0 auto; 
             background: rgba(255,255,255,0.1); 
-            padding: 30px; 
+            padding: 40px; 
             border-radius: 15px;
             backdrop-filter: blur(10px);
         }
         h1 { 
             text-align: center; 
             margin-bottom: 30px; 
-            font-size: 2.5em;
+            font-size: 3em;
         }
-        .status { 
-            background: rgba(255,0,0,0.2); 
-            padding: 15px; 
-            border-radius: 8px; 
+        .failover-info { 
+            background: rgba(0,150,255,0.2); 
+            padding: 20px; 
+            border-radius: 10px; 
             margin: 20px 0; 
             text-align: center;
-            border: 2px solid rgba(255,0,0,0.5);
+            border: 1px solid rgba(0,150,255,0.5);
         }
-        .info { 
-            background: rgba(0,255,0,0.2); 
-            padding: 15px; 
-            border-radius: 8px; 
-            margin: 20px 0; 
-            border: 2px solid rgba(0,255,0,0.5);
-        }
-        .server-info {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        .server-card {
+        .portfolio-content {
             background: rgba(255,255,255,0.1);
-            padding: 20px;
+            padding: 30px;
             border-radius: 10px;
-            text-align: center;
-        }
-        a { color: #ffd700; }
-        .timestamp { 
-            text-align: center; 
-            margin-top: 30px; 
-            opacity: 0.7; 
-            font-size: 0.9em;
+            margin: 20px 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🛡️ SentinelDR Emergency Portfolio</h1>
+        <h1>🚀 Dharshini J - Portfolio</h1>
         
-        <div class="status">
-            <h2>⚠️ FAILOVER MODE ACTIVE</h2>
-            <p>Primary server is unavailable. This portfolio is being served by the secondary server to maintain application availability.</p>
+        <div class="failover-info">
+            <h3>🛡️ Served via SentinelDR Failover System</h3>
+            <p>This portfolio is being served by the secondary server during primary server maintenance.</p>
         </div>
         
-        <div class="info">
-            <h3>📊 System Status</h3>
-            <div class="server-info">
-                <div class="server-card">
-                    <h4>📱 Phone Server (This Server)</h4>
-                    <p><strong>Status:</strong> ✅ Online</p>
-                    <p><strong>Role:</strong> Secondary/Failover</p>
-                    <p><strong>Node:</strong> phone-node-02</p>
-                </div>
-                <div class="server-card">
-                    <h4>💻 Laptop Server</h4>
-                    <p><strong>Status:</strong> ❌ Offline</p>
-                    <p><strong>Role:</strong> Primary</p>
-                    <p><strong>Node:</strong> laptop-node-01</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="info">
-            <h3>🔗 Available Services</h3>
+        <div class="portfolio-content">
+            <h2>Welcome to my Portfolio</h2>
+            <p>This is a demonstration of the SentinelDR disaster recovery system.</p>
+            <p>Even when the primary server is offline, the secondary server keeps the application available.</p>
+            
+            <h3>🔗 System Status</h3>
             <ul>
-                <li><strong>Health Check:</strong> <a href="/health">/health</a></li>
-                <li><strong>System Status:</strong> <a href="/status">/status</a></li>
-                <li><strong>Events Log:</strong> <a href="/events">/events</a></li>
-                <li><strong>SentinelDR Dashboard:</strong> <a href="http://localhost:5174/" target="_blank">Open Dashboard</a></li>
+                <li><strong>Current Server:</strong> Secondary (Phone/Termux)</li>
+                <li><strong>Failover Status:</strong> Active</li>
+                <li><strong>Service Level:</strong> Full Portfolio Available</li>
             </ul>
-        </div>
-        
-        <div class="info">
-            <h3>📋 Recovery Information</h3>
-            <p>This emergency portfolio will remain active until:</p>
-            <ul>
-                <li>Primary server comes back online</li>
-                <li>Automatic recovery is triggered</li>
-                <li>System returns to normal operation</li>
-            </ul>
-            <p><strong>Recovery is automatic</strong> - no manual intervention required.</p>
-        </div>
-        
-        <div class="timestamp">
-            <p>Emergency Portfolio served by SentinelDR Phone Server</p>
-            <p>Generated: <script>document.write(new Date().toLocaleString())</script></p>
         </div>
     </div>
 </body>

@@ -21,6 +21,7 @@ class SentinelDRSmartProxy:
         # Server endpoints
         self.laptop_url = "http://localhost:8000"
         self.phone_url = "http://localhost:8001"  # Will be dynamically discovered
+        self.discovered_phone_url = None  # Actual discovered phone URL
         
         # Health monitoring
         self.health_check_interval = 3  # Match SentinelDR heartbeat interval
@@ -46,19 +47,47 @@ class SentinelDRSmartProxy:
     async def check_server_health(self, server_url: str, server_name: str) -> bool:
         """Check if a server is healthy using SentinelDR health endpoint."""
         try:
-            # If checking phone server, try to discover its current location first
+            # If checking phone server, try multiple locations
             if server_name == "phone":
-                await self.discover_phone_server_if_needed()
-                server_url = self.phone_url
-            
-            timeout = ClientTimeout(total=2)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(f"{server_url}/health") as response:
-                    if response.status == 200:
-                        health_data = await response.json()
-                        # Verify it's actually healthy and the expected server
-                        if health_data.get("status") == "healthy":
-                            return True
+                logger.debug(f"[HEALTH] Checking phone server health...")
+                phone_candidates = await self.get_active_phone_url()
+                logger.debug(f"[HEALTH] Trying {len(phone_candidates)} phone candidates")
+                
+                for i, candidate_url in enumerate(phone_candidates):
+                    logger.debug(f"[HEALTH] Trying phone candidate {i+1}/{len(phone_candidates)}: {candidate_url}")
+                    try:
+                        timeout = ClientTimeout(total=3)  # Longer timeout for network discovery
+                        async with aiohttp.ClientSession(timeout=timeout) as session:
+                            async with session.get(f"{candidate_url}/health") as response:
+                                logger.debug(f"[HEALTH] Phone candidate {candidate_url} responded: {response.status}")
+                                if response.status == 200:
+                                    health_data = await response.json()
+                                    logger.debug(f"[HEALTH] Phone health data: {health_data}")
+                                    if health_data.get("status") == "healthy":
+                                        # Found working phone server - update URL
+                                        if self.phone_url != candidate_url:
+                                            logger.info(f"📱 Phone server discovered at: {candidate_url} (was: {self.phone_url})")
+                                            self.phone_url = candidate_url
+                                            self.discovered_phone_url = candidate_url
+                                        return True
+                    except Exception as e:
+                        logger.debug(f"[HEALTH] Phone candidate {candidate_url} failed: {e}")
+                        continue
+                
+                logger.debug(f"[HEALTH] All {len(phone_candidates)} phone candidates failed")
+                return False
+            else:
+                # Regular health check for laptop server
+                logger.debug(f"[HEALTH] Checking laptop server: {server_url}")
+                timeout = ClientTimeout(total=2)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(f"{server_url}/health") as response:
+                        logger.debug(f"[HEALTH] Laptop responded: {response.status}")
+                        if response.status == 200:
+                            health_data = await response.json()
+                            if health_data.get("status") == "healthy":
+                                return True
+                        
         except Exception as e:
             logger.debug(f"[HEALTH] {server_name} health check failed: {e}")
         return False
@@ -67,22 +96,107 @@ class SentinelDRSmartProxy:
         """Discover phone server location if needed"""
         current_time = time.time()
         if current_time - self.last_phone_discovery > self.phone_discovery_interval:
-            try:
-                timeout = ClientTimeout(total=3)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(f"{self.laptop_url}/phone-server-url", 
-                                         headers={"X-API-Key": "my-project-final"}) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if data.get('phone_server_url') and data.get('status') == 'discovered':
-                                new_phone_url = data['phone_server_url']
-                                if self.phone_url != new_phone_url:
-                                    logger.info(f"📱 Phone server discovered at: {new_phone_url} (was: {self.phone_url})")
-                                    self.phone_url = new_phone_url
-            except Exception as e:
-                logger.debug(f"Phone discovery failed: {e}")
+            phone_found = False
             
-            self.last_phone_discovery = current_time
+            # Method 1: Try to ask laptop server (if available)
+            if not phone_found:
+                try:
+                    timeout = ClientTimeout(total=2)  # Short timeout since laptop might be down
+                    async with aiohttp.ClientSession(timeout=timeout) as session:
+                        async with session.get(f"{self.laptop_url}/phone-server-url", 
+                                             headers={"X-API-Key": "my-project-final"}) as response:
+                            if response.status == 200:
+                                data = await response.json()
+                                if data.get('phone_server_url') and data.get('status') == 'discovered':
+                                    new_phone_url = data['phone_server_url']
+                                    if self.phone_url != new_phone_url:
+                                        logger.info(f"📱 Phone server discovered via laptop: {new_phone_url}")
+                                        self.phone_url = new_phone_url
+                                        phone_found = True
+                except Exception as e:
+                    logger.debug(f"Phone discovery via laptop failed: {e}")
+            
+            # Method 2: Try common IP ranges if laptop is down (failover scenario)
+            if not phone_found:
+                # Get our local IP and try the phone server on the same network
+                try:
+                    import socket
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    s.connect(("8.8.8.8", 80))
+                    local_ip = s.getsockname()[0]
+                    s.close()
+                    
+                    # Extract network prefix (e.g. 10.187.68.xxx)
+                    ip_parts = local_ip.split('.')
+                    network_prefix = '.'.join(ip_parts[:3])
+                    
+                    # Try common IPs in same subnet
+                    for last_octet in [57, 1, 2, 100, 101, 102]:  # Common phone/device IPs
+                        candidate_ip = f"{network_prefix}.{last_octet}"
+                        if candidate_ip != local_ip:  # Don't try our own IP
+                            candidate_url = f"http://{candidate_ip}:8001"
+                            try:
+                                timeout = ClientTimeout(total=1)  # Very short timeout for network scan
+                                async with aiohttp.ClientSession(timeout=timeout) as session:
+                                    async with session.get(f"{candidate_url}/health") as response:
+                                        if response.status == 200:
+                                            data = await response.json()
+                                            if data.get('node_id') and 'phone' in data.get('node_id', ''):
+                                                logger.info(f"📱 Phone server discovered via network scan: {candidate_url}")
+                                                self.phone_url = candidate_url
+                                                phone_found = True
+                                                break
+                            except Exception:
+                                continue  # Try next IP
+                except Exception as e:
+                    logger.debug(f"Network scan discovery failed: {e}")
+            
+    async def get_active_phone_url(self):
+        """Get the active phone server URL, trying multiple locations"""
+        phone_candidates = []
+        
+        # Method 1: Known locations from logs and configuration
+        phone_candidates.extend([
+            "http://localhost:8001",           # Local phone server
+            "http://10.187.68.57:8001",       # Known Termux IP from logs
+            "http://172.17.96.1:8001",        # Common Android hotspot IP
+        ])
+        
+        # Add previously discovered URL if available
+        if self.discovered_phone_url:
+            phone_candidates.append(self.discovered_phone_url)
+        
+        # Method 2: Network-based discovery
+        try:
+            import socket
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            
+            # Extract network prefix and add common device IPs
+            ip_parts = local_ip.split('.')
+            network_prefix = '.'.join(ip_parts[:3])
+            
+            # Try common device IPs in same subnet
+            for last_octet in [57, 1, 2, 100, 101, 151, 200, 201]:
+                candidate_ip = f"{network_prefix}.{last_octet}"
+                if candidate_ip != local_ip:  # Don't try our own IP
+                    phone_candidates.append(f"http://{candidate_ip}:8001")
+                    
+            logger.debug(f"[DISCOVERY] Network prefix: {network_prefix}, trying {len(phone_candidates)} candidates")
+                    
+        except Exception as e:
+            logger.debug(f"[DISCOVERY] Network discovery failed: {e}")
+        
+        # Remove duplicates while preserving order
+        unique_candidates = []
+        for url in phone_candidates:
+            if url and url not in unique_candidates:
+                unique_candidates.append(url)
+        
+        logger.debug(f"[DISCOVERY] Phone candidates: {unique_candidates}")
+        return unique_candidates
     
     async def determine_active_server(self) -> str:
         """Determine which server should be active based on SentinelDR state."""
@@ -387,14 +501,14 @@ async def main():
     print("╔════════════════════════════════════════════════╗")
     print("║         SentinelDR Smart Proxy v1.0           ║")
     print("╠════════════════════════════════════════════════╣")
-    print("║  Single Application Endpoint: localhost:9000  ║")
+    print("║  Single Application Endpoint: localhost:9001  ║")
     print("║  Primary Server:  localhost:8000 (laptop)     ║")
     print("║  Secondary Server: localhost:8001 (phone)     ║")
     print("║  Health Checks: Every 3 seconds               ║")
     print("╚════════════════════════════════════════════════╝")
     print()
-    print("🌐 Portfolio Access: http://localhost:9000/")
-    print("📊 Proxy Status:     http://localhost:9000/sentineldr-proxy-status")
+    print("🌐 Portfolio Access: http://localhost:9001/")
+    print("📊 Proxy Status:     http://localhost:9001/sentineldr-proxy-status")
     print("🎯 Automated failover/failback is now ACTIVE!")
     print("   - Laptop healthy → Routes to laptop:8000")
     print("   - Laptop down    → Routes to phone:8001") 
@@ -402,10 +516,10 @@ async def main():
     
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, 'localhost', 9000)
+    site = web.TCPSite(runner, 'localhost', 9001)
     await site.start()
     
-    logger.info("🚀 SentinelDR Smart Proxy started on http://localhost:9000/")
+    logger.info("🚀 SentinelDR Smart Proxy started on http://localhost:9001/")
     
     # Keep running
     try:
