@@ -67,3 +67,28 @@ async def get_node(node_id: str, request: Request):
         return peer
 
     raise HTTPException(status_code=404, detail=f"Node {node_id!r} not found")
+
+
+@router.get("/phone-server-url")
+async def get_phone_server_url(request: Request):
+    """Get the discovered phone server URL for frontend dynamic connection"""
+    settings = request.app.state.settings
+    runtime = request.app.state.runtime
+    
+    if runtime.peer_host is None:
+        return {
+            "phone_server_url": None,
+            "status": "not_discovered",
+            "message": "Phone server not yet discovered"
+        }
+    
+    phone_url = f"http://{runtime.peer_host}:{settings.PEER_PORT}"
+    
+    return {
+        "phone_server_url": phone_url,
+        "status": "discovered",
+        "phone_ip": runtime.peer_host,
+        "phone_port": settings.PEER_PORT,
+        "peer_status": runtime.peer_status,
+        "message": f"Phone server available at {phone_url}"
+    }

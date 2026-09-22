@@ -22,6 +22,7 @@ export function useHealth() {
         }),
         phoneAPI.getHealth().catch((err) => {
           console.error('❌ Phone health fetch failed:', err.message);
+          console.log('📱 Current phone URL:', phoneAPI.getCurrentPhoneUrl());
           return null;
         }),
       ]);
