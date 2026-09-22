@@ -45,37 +45,6 @@ def _load_env_file(path: Path) -> None:
 _env_path = Path(__file__).parent / ".env.phone"
 _load_env_file(_env_path)
 
-# ── Auto IP Detection ─────────────────────────────────────────────────────────
-# Import network utilities for automatic IP detection
-try:
-    from shared.network_utils import get_local_ip, get_host_for_binding
-    
-    def get_auto_detected_ip():
-        """Get the automatically detected IP address"""
-        ip = get_local_ip()
-        return ip if ip else "localhost"
-    
-    # Auto-detect IP on startup
-    AUTO_DETECTED_IP = get_auto_detected_ip()
-    print(f"📡 Phone server auto-detected IP: {AUTO_DETECTED_IP}")
-    
-except ImportError:
-    # Fallback if network utils not available (for Termux compatibility)
-    import socket
-    
-    def get_auto_detected_ip():
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            return ip
-        except Exception:
-            return "localhost"
-    
-    AUTO_DETECTED_IP = get_auto_detected_ip()
-    print(f"📡 Phone server detected IP: {AUTO_DETECTED_IP}")
-
 
 # ── Config values ─────────────────────────────────────────────────────────────
 

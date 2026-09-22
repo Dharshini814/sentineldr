@@ -4,6 +4,18 @@ import logging
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Import network auto-detection
+try:
+    from shared.network_utils import get_host_for_binding, get_local_ip, update_frontend_env_if_needed
+except ImportError:
+    # Fallback if network utils not available
+    def get_host_for_binding(config_host=None):
+        return "0.0.0.0"
+    def get_local_ip():
+        return None
+    def update_frontend_env_if_needed():
+        pass
+
 
 # ── Settings ──────────────────────────────────────────────────────────────────
 

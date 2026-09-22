@@ -20,6 +20,13 @@ from laptop.services.heartbeat_service import HeartbeatService
 from laptop.services.sync_service import SyncService
 from laptop.services.failover_service import FailoverService
 
+# Import network utilities
+try:
+    from shared.network_utils import update_frontend_env_if_needed
+except ImportError:
+    def update_frontend_env_if_needed():
+        pass
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL, logging.INFO),
@@ -104,6 +111,13 @@ async def lifespan(app: FastAPI):
     app.state.heartbeat_service = heartbeat_svc
     app.state.sync_service = sync_svc
     app.state.failover_service = failover_svc
+
+    # Auto-update frontend .env with current IP
+    try:
+        update_frontend_env_if_needed()
+        logger.info(f"[STARTUP] Auto-updated frontend .env with IP: {local_ip}")
+    except Exception as e:
+        logger.debug(f"[STARTUP] Could not update frontend .env: {e}")
 
     logger.info(
         "[STARTUP] SentinelDR laptop node ready on port %d", settings.NODE_PORT
