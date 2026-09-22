@@ -170,15 +170,19 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
     # ── GET handlers ──────────────────────────────────────────────────────────
 
     def _handle_get_portfolio(self):
-        """GET / — Serve portfolio HTML during failover."""
+        """GET / — Serve portfolio HTML during failover or when primary is unreachable."""
         try:
-            # Only serve portfolio if we're in active failover mode
+            # Check if we're in active failover mode
             in_failover = config.runtime.get("failover_active", False)
+            peer_status = config.runtime.get("peer_status", "unknown")
             
-            logger.info("[PORTFOLIO] Request received - failover_active: %s", in_failover)
+            logger.info("[PORTFOLIO] Request received - failover_active: %s, peer_status: %s", in_failover, peer_status)
             
-            if not in_failover:
-                # Not in failover mode - redirect to primary
+            # Try to determine if primary is available
+            primary_available = (peer_status == "healthy")
+            
+            if not in_failover and primary_available:
+                # Primary is healthy - redirect to primary
                 peer_host = config.runtime.get("peer_host")
                 if peer_host:
                     redirect_url = f"http://{peer_host}:{config.PEER_PORT}/"
@@ -188,36 +192,157 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
                     self.send_header("Access-Control-Allow-Origin", "*")
                     self.end_headers()
                     return
-                else:
-                    # No peer known - serve unavailable message
-                    logger.warning("[PORTFOLIO] No peer host available")
-                    self._send_error(503, "Primary server unavailable and no failover active")
-                    return
             
-            # We're in failover - serve the portfolio
+            # Either we're in failover OR primary is not available - serve portfolio
+            logger.info("[PORTFOLIO] Serving failover portfolio (failover: %s, primary_available: %s)", in_failover, primary_available)
+            
+            # Try to serve from file system first
             portfolio_path = Path(__file__).parent.parent.parent / "frontend" / "portfolio" / "index.html"
-            logger.info("[PORTFOLIO] Serving from: %s", portfolio_path)
             
             if portfolio_path.exists():
+                logger.info("[PORTFOLIO] Serving from file: %s", portfolio_path)
                 with open(portfolio_path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                
-                # Send HTML response
-                body = content.encode('utf-8')
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
-                logger.info("[PORTFOLIO] Portfolio served successfully")
             else:
-                logger.error("[PORTFOLIO] Portfolio file not found at: %s", portfolio_path)
-                self._send_error(404, "Portfolio not found during failover")
+                # Fallback: serve embedded portfolio HTML
+                logger.info("[PORTFOLIO] File not found, serving embedded portfolio")
+                content = self._get_embedded_portfolio()
+            
+            # Send HTML response
+            body = content.encode('utf-8')
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+            logger.info("[PORTFOLIO] Portfolio served successfully")
                 
         except Exception as exc:
             logger.error("[PORTFOLIO] Error serving portfolio: %s", exc)
             self._send_error(500, "Failed to serve portfolio")
+    
+    def _get_embedded_portfolio(self):
+        """Return embedded portfolio HTML for failover scenarios."""
+        return '''<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SentinelDR - Emergency Portfolio</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        h1 { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            font-size: 2.5em;
+        }
+        .status { 
+            background: rgba(255,0,0,0.2); 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 20px 0; 
+            text-align: center;
+            border: 2px solid rgba(255,0,0,0.5);
+        }
+        .info { 
+            background: rgba(0,255,0,0.2); 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 20px 0; 
+            border: 2px solid rgba(0,255,0,0.5);
+        }
+        .server-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .server-card {
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        a { color: #ffd700; }
+        .timestamp { 
+            text-align: center; 
+            margin-top: 30px; 
+            opacity: 0.7; 
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🛡️ SentinelDR Emergency Portfolio</h1>
+        
+        <div class="status">
+            <h2>⚠️ FAILOVER MODE ACTIVE</h2>
+            <p>Primary server is unavailable. This portfolio is being served by the secondary server to maintain application availability.</p>
+        </div>
+        
+        <div class="info">
+            <h3>📊 System Status</h3>
+            <div class="server-info">
+                <div class="server-card">
+                    <h4>📱 Phone Server (This Server)</h4>
+                    <p><strong>Status:</strong> ✅ Online</p>
+                    <p><strong>Role:</strong> Secondary/Failover</p>
+                    <p><strong>Node:</strong> phone-node-02</p>
+                </div>
+                <div class="server-card">
+                    <h4>💻 Laptop Server</h4>
+                    <p><strong>Status:</strong> ❌ Offline</p>
+                    <p><strong>Role:</strong> Primary</p>
+                    <p><strong>Node:</strong> laptop-node-01</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="info">
+            <h3>🔗 Available Services</h3>
+            <ul>
+                <li><strong>Health Check:</strong> <a href="/health">/health</a></li>
+                <li><strong>System Status:</strong> <a href="/status">/status</a></li>
+                <li><strong>Events Log:</strong> <a href="/events">/events</a></li>
+                <li><strong>SentinelDR Dashboard:</strong> <a href="http://localhost:5174/" target="_blank">Open Dashboard</a></li>
+            </ul>
+        </div>
+        
+        <div class="info">
+            <h3>📋 Recovery Information</h3>
+            <p>This emergency portfolio will remain active until:</p>
+            <ul>
+                <li>Primary server comes back online</li>
+                <li>Automatic recovery is triggered</li>
+                <li>System returns to normal operation</li>
+            </ul>
+            <p><strong>Recovery is automatic</strong> - no manual intervention required.</p>
+        </div>
+        
+        <div class="timestamp">
+            <p>Emergency Portfolio served by SentinelDR Phone Server</p>
+            <p>Generated: <script>document.write(new Date().toLocaleString())</script></p>
+        </div>
+    </div>
+</body>
+</html>'''
 
     def _handle_get_health(self):
         """GET /health — Public health endpoint."""
