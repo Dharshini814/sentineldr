@@ -201,9 +201,9 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
             # Either we're in failover OR primary is not available - serve portfolio
             logger.info("[PORTFOLIO] Serving failover portfolio (failover: %s, primary_available: %s)", in_failover, primary_available)
             
-            # ENTERPRISE APPROACH: Serve from embedded content (simulates CDN/object storage)
-            # No file system dependencies - content is embedded in the application
-            logger.info("[PORTFOLIO] Serving from embedded content (enterprise-style)")
+            # ENTERPRISE APPROACH: Serve from same path as laptop server
+            # Both servers now serve identical portfolio content
+            logger.info("[PORTFOLIO] Serving failover portfolio from same source as laptop")
             content = self._get_embedded_portfolio()
             
             # Send HTML response
@@ -221,247 +221,96 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
             self._send_error(500, "Failed to serve portfolio")
     
     def _get_embedded_portfolio(self):
-        """Return enterprise-style portfolio HTML served from embedded content.
+        """Return the SAME portfolio HTML that laptop server serves.
         
-        ENTERPRISE PATTERN: Content embedded in application (simulates CDN/object storage)
-        - No file system dependencies
-        - Content served from memory
-        - Includes disaster recovery information
-        - Self-contained HTML with embedded CSS/styling
+        ENTERPRISE PATTERN: Content served from embedded path
+        - Both servers serve identical portfolio content
+        - Enterprise-style content delivery
         """
-        # Get real-time system statistics for display
-        stats = storage.get_storage_stats()
-        local_ip = get_local_ip()
-        uptime = int(time.time() - config.runtime.get("start_time", time.time()))
-        failover_status = "Active" if config.runtime.get("failover_active", False) else "Standby"
-        
-        return f'''<!DOCTYPE html>
+        try:
+            # Try to read from the original portfolio file
+            portfolio_path = Path(__file__).parent.parent.parent / "frontend" / "portfolio" / "index.html"
+            
+            if portfolio_path.exists():
+                logger.info("[PORTFOLIO] Serving from original portfolio file (enterprise-consistent)")
+                with open(portfolio_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            else:
+                # Fallback: embedded minimal portfolio
+                logger.info("[PORTFOLIO] Serving fallback portfolio (file not found)")
+                return '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dharshini J - Portfolio</title>
     <style>
-        /* Enterprise-grade responsive design */
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        
-        body {{ 
+        body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #2C3E50 0%, #34495E 50%, #2C3E50 100%);
-            color: #ECF0F1;
-            min-height: 100vh;
-            line-height: 1.6;
-        }}
-        
-        .enterprise-header {{
-            background: rgba(52, 73, 94, 0.95);
-            padding: 15px 0;
-            border-bottom: 2px solid #3498DB;
-            backdrop-filter: blur(10px);
-        }}
-        
-        .container {{ 
-            max-width: 1200px; 
-            margin: 0 auto; 
-            padding: 0 20px;
-        }}
-        
-        .dr-status {{
-            background: linear-gradient(135deg, #3498DB, #2980B9);
-            color: white;
-            padding: 20px;
-            text-align: center;
-            margin: 20px 0;
-            border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(52, 152, 219, 0.3);
-        }}
-        
-        .portfolio-main {{
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 30px;
-            margin: 30px 0;
-        }}
-        
-        .content-section {{
-            background: rgba(44, 62, 80, 0.8);
-            padding: 30px;
-            border-radius: 10px;
-            border: 1px solid rgba(52, 152, 219, 0.3);
-        }}
-        
-        .system-metrics {{
-            background: rgba(39, 174, 96, 0.1);
-            border: 1px solid rgba(39, 174, 96, 0.3);
-        }}
-        
-        .metric-grid {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin: 20px 0;
-        }}
-        
-        .metric-card {{
-            background: rgba(44, 62, 80, 0.6);
-            padding: 15px;
-            border-radius: 6px;
-            text-align: center;
-            border: 1px solid rgba(52, 152, 219, 0.2);
-        }}
-        
-        .metric-value {{
-            font-size: 1.8em;
-            font-weight: bold;
-            color: #3498DB;
-            display: block;
-        }}
-        
-        .metric-label {{
-            font-size: 0.9em;
-            color: #BDC3C7;
-            margin-top: 5px;
-        }}
-        
-        h1 {{ 
-            text-align: center; 
-            color: #3498DB; 
-            font-size: 2.5em;
-            margin: 20px 0;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }}
-        
-        h2 {{ color: #E74C3C; margin: 25px 0 15px 0; }}
-        h3 {{ color: #F39C12; margin: 20px 0 10px 0; }}
-        
-        .enterprise-badge {{
-            display: inline-block;
-            background: linear-gradient(45deg, #E74C3C, #C0392B);
-            color: white;
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            font-weight: bold;
-            margin: 10px 5px;
-        }}
-        
-        .status-indicator {{
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            background: #27AE60;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 2s infinite;
-        }}
-        
-        @keyframes pulse {{
-            0% {{ opacity: 1; }}
-            50% {{ opacity: 0.5; }}
-            100% {{ opacity: 1; }}
-        }}
-        
-        .footer {{
-            text-align: center;
-            padding: 30px;
-            background: rgba(44, 62, 80, 0.6);
-            margin-top: 40px;
-            border-top: 1px solid rgba(52, 152, 219, 0.3);
-        }}
-        
-        @media (max-width: 768px) {{
-            .portfolio-main {{ grid-template-columns: 1fr; }}
-            .metric-grid {{ grid-template-columns: 1fr; }}
-        }}
+            margin: 0; padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white; min-height: 100vh;
+        }
+        .container { 
+            max-width: 1000px; margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 40px; border-radius: 15px;
+        }
+        h1 { text-align: center; margin-bottom: 30px; font-size: 3em; }
+        .dr-info { 
+            background: rgba(0,150,255,0.2); padding: 20px; 
+            border-radius: 10px; margin: 20px 0; text-align: center;
+        }
+        .content { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 10px; }
     </style>
 </head>
 <body>
-    <div class="enterprise-header">
-        <div class="container">
-            <h1><span class="status-indicator"></span>Dharshini J - Portfolio</h1>
-        </div>
-    </div>
-
     <div class="container">
-        <div class="dr-status">
-            <h2>🛡️ Enterprise Disaster Recovery System Active</h2>
-            <p><strong>SentinelDR Secondary Server</strong> — Providing continuous service during primary server maintenance</p>
-            <span class="enterprise-badge">Zero Downtime Architecture</span>
-            <span class="enterprise-badge">Auto-Failover Enabled</span>
-            <span class="enterprise-badge">Real-time Monitoring</span>
+        <h1>Dharshini J - Portfolio</h1>
+        
+        <div class="dr-info">
+            <h3>🛡️ Served via SentinelDR Disaster Recovery</h3>
+            <p>Portfolio served by secondary server during primary server maintenance.</p>
         </div>
         
-        <div class="portfolio-main">
-            <div class="content-section">
-                <h2>💼 Professional Portfolio</h2>
-                <p>Welcome to my professional portfolio. This application demonstrates enterprise-level disaster recovery capabilities.</p>
-                
-                <h3>🏗️ Enterprise Architecture Principles</h3>
-                <ul>
-                    <li><strong>High Availability:</strong> 99.9%+ uptime through redundant servers</li>
-                    <li><strong>Automatic Failover:</strong> Sub-10-second recovery times</li>
-                    <li><strong>Content Delivery:</strong> Embedded content delivery (CDN-style)</li>
-                    <li><strong>Real-time Monitoring:</strong> Continuous health checks and alerts</li>
-                    <li><strong>Geographic Distribution:</strong> Multi-location server deployment</li>
-                </ul>
-                
-                <h3>🔧 Technical Implementation</h3>
-                <p>This portfolio is served using enterprise disaster recovery patterns:</p>
-                <ul>
-                    <li><strong>Smart Proxy:</strong> Intelligent traffic routing and health monitoring</li>
-                    <li><strong>Service Discovery:</strong> Automatic secondary server detection</li>
-                    <li><strong>Content Embedding:</strong> No file system dependencies (enterprise-style)</li>
-                    <li><strong>Real-time Sync:</strong> Data consistency across all servers</li>
-                </ul>
-            </div>
+        <div class="content">
+            <h2>Welcome to my Portfolio</h2>
+            <p>BCA student at SSMRV College, Bengaluru building real-world systems.</p>
             
-            <div class="content-section system-metrics">
-                <h3>📊 Live System Metrics</h3>
-                
-                <div class="metric-grid">
-                    <div class="metric-card">
-                        <span class="metric-value">{failover_status}</span>
-                        <div class="metric-label">DR Status</div>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-value">{uptime}s</span>
-                        <div class="metric-label">Uptime</div>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-value">{local_ip}</span>
-                        <div class="metric-label">Server IP</div>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-value">v{stats.get('sync_version', 0)}</span>
-                        <div class="metric-label">Sync Version</div>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-value">{stats.get('project_count', 0)}</span>
-                        <div class="metric-label">Projects</div>
-                    </div>
-                    <div class="metric-card">
-                        <span class="metric-value">{config.NODE_ID}</span>
-                        <div class="metric-label">Node ID</div>
-                    </div>
-                </div>
-                
-                <h3>🌐 Network Information</h3>
-                <p><strong>Current Server:</strong> {config.NODE_ROLE.title()} ({local_ip}:8001)</p>
-                <p><strong>Content Source:</strong> Embedded (Enterprise CDN-style)</p>
-                <p><strong>Last Sync:</strong> {stats.get('last_sync_time', 'Never')}</p>
-            </div>
+            <h3>Experience</h3>
+            <ul>
+                <li><strong>Python Technology Stack Intern</strong> - Infosys Springboard</li>
+                <li><strong>Cybersecurity Intern</strong> - Corizo</li>
+            </ul>
+            
+            <h3>Projects</h3>
+            <ul>
+                <li><strong>SentinelDR</strong> - Disaster Recovery System (Current)</li>
+                <li><strong>BillingPro</strong> - SaaS Billing Platform</li>
+                <li><strong>Aura Resume</strong> - ATS Resume Builder</li>
+            </ul>
+            
+            <h3>Contact</h3>
+            <p>Email: dharshinijofficial@gmail.com</p>
+            <p>LinkedIn: linkedin.com/in/dharshinijreddy</p>
+            <p>GitHub: github.com/Dharshini814</p>
         </div>
-    </div>
-    
-    <div class="footer">
-        <p><strong>SentinelDR Enterprise Disaster Recovery System</strong></p>
-        <p>Demonstrating enterprise-grade high availability and automatic failover capabilities</p>
-        <p style="font-size: 0.9em; color: #95A5A6; margin-top: 10px;">
-            Content served via embedded delivery • No file system dependencies • Enterprise architecture patterns
-        </p>
     </div>
 </body>
 </html>'''
+        except Exception as e:
+            logger.error(f"[PORTFOLIO] Error loading portfolio: {e}")
+            return self._get_basic_fallback_portfolio()
+    
+    def _get_basic_fallback_portfolio(self):
+        """Basic fallback if all else fails"""
+        return '''<!DOCTYPE html>
+<html><head><title>Dharshini J - Portfolio</title></head>
+<body style="font-family: Arial; padding: 40px; background: #f0f0f0;">
+<h1>Dharshini J - Portfolio</h1>
+<p>Portfolio served via SentinelDR disaster recovery system.</p>
+<p>Contact: dharshinijofficial@gmail.com</p>
+</body></html>'''
 
     def _handle_get_health(self):
         """GET /health — Public health endpoint."""
