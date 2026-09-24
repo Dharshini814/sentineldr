@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>SentinelDR — Live Dashboard v2.0</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <style>
+        :root {
+            --navy-950: #060C18; --navy-900: #0B1628; --navy-800: #111F38;
+            --blue-500: #2563EB; --blue-400: #3B82F6; --blue-300: #60A5FA;
+            --green-400: #10B981; --green-300: #34D399;
+            --red-500: #EF4444; --red-400: #F87171;
+            --amber-400: #F59E0B; --amber-300: #FCD34D;
+            --slate-100: #F0F4F8; --slate-500: #627D98; --slate-600: #486581;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--navy-950); color: var(--slate-100); }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 40px; }
+        .title { font-size: 2.5rem; font-weight: 700; color: white; margin-bottom: 10px; }
+        .subtitle { color: var(--slate-500); margin-bottom: 20px; }
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 40px; }
+        .card { background: var(--navy-800); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; }
+        .card-title { font-size: 0.9rem; font-weight: 600; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 15px; }
+        .status-indicator { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .dot.green { background: var(--green-400); box-shadow: 0 0 10px var(--green-400); }
+        .dot.red { background: var(--red-500); box-shadow: 0 0 10px var(--red-500); }
+        .status-text { font-size: 1.1rem; font-weight: 600; color: white; }
+        .detail-text { font-size: 0.9rem; color: var(--slate-500); }
+        .api-test { background: var(--navy-900); padding: 15px; border-radius: 8px; margin: 10px 0; }
+        .success { border-left: 4px solid var(--green-400); }
+        .error { border-left: 4px solid var(--red-500); }
+        .btn { padding: 12px 24px; background: var(--blue-500); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; margin: 10px; }
+        .btn:hover { background: var(--blue-400); }
+        pre { font-size: 0.8rem; color: var(--slate-400); overflow-x: auto; margin-top: 10px; }
+        .spinner { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">🛡️ SentinelDR Live Dashboard</h1>
+            <p class="subtitle">Real-time disaster recovery monitoring & control</p>
+            <button class="btn" onclick="testAllConnections()">🔄 Test Connections</button>
+            <button class="btn" onclick="clearAllCache()">🗑️ Clear Cache</button>
+        </div>
+        
+        <div id="status-container">
+            <div class="status-grid">
+                <div class="card">
+                    <div class="card-title">Primary Server (Laptop)</div>
+                    <div class="status-indicator">
+                        <div class="dot red" id="laptop-dot"></div>
+                        <div class="status-text" id="laptop-status">Connecting...</div>
+                    </div>
+                    <div class="detail-text" id="laptop-details">Testing connection...</div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">DR Server (Phone)</div>
+                    <div class="status-indicator">
+                        <div class="dot red" id="phone-dot"></div>
+                        <div class="status-text" id="phone-status">Connecting...</div>
+                    </div>
+                    <div class="detail-text" id="phone-details">Testing connection...</div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-title">API Authentication</div>
+                    <div class="status-indicator">
+                        <div class="dot red" id="auth-dot"></div>
+                        <div class="status-text" id="auth-status">Testing...</div>
+                    </div>
+                    <div class="detail-text" id="auth-details">API Key: my-project-final</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="test-results"></div>
+    </div>
+
+    <script>
+        const API_KEY = 'my-project-final';
+        const LAPTOP_URL = 'http://localhost:8000';
+        const PHONE_URL = 'http://localhost:8001';
+        
+        function clearAllCache() {
+            localStorage.clear();
+            sessionStorage.clear();
+            if ('caches' in window) {
+                caches.keys().then(names => {
+                    names.forEach(name => caches.delete(name));
+                });
+            }
+            location.reload(true);
+        }
+        
+        function updateStatus(prefix, isOnline, status, details) {
+            const dot = document.getElementById(`${prefix}-dot`);
+            const statusEl = document.getElementById(`${prefix}-status`);
+            const detailsEl = document.getElementById(`${prefix}-details`);
+            
+            dot.className = `dot ${isOnline ? 'green' : 'red'}`;
+            statusEl.textContent = status;
+            detailsEl.textContent = details;
+        }
+        
+        async function testAPI(url, name, needsAuth = true) {
+            try {
+                const headers = { 'Cache-Control': 'no-cache' };
+                if (needsAuth) headers['X-API-Key'] = API_KEY;
+                
+                console.log(`Testing ${name}: ${url} with API key: ${API_KEY}`);
+                
+                const response = await fetch(url, { 
+                    headers,
+                    method: 'GET'
+                });
+                
+                console.log(`${name} response:`, response.status, response.statusText);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return { success: true, data, status: response.status };
+                } else {
+                    return { success: false, error: `${response.status} ${response.statusText}`, status: response.status };
+                }
+            } catch (error) {
+                console.error(`${name} error:`, error);
+                return { success: false, error: error.message, status: 0 };
+            }
+        }
+        
+        async function testAllConnections() {
+            // Clear any existing results
+            document.getElementById('test-results').innerHTML = '<div class="api-test"><h3>🔄 Testing Connections...</h3></div>';
+            
+            // Test laptop server health
+            const laptopTest = await testAPI(`${LAPTOP_URL}/health`, 'Laptop Health', false);
+            if (laptopTest.success) {
+                updateStatus('laptop', true, 'ONLINE', `Node: ${laptopTest.data.node_id} | Uptime: ${Math.floor(laptopTest.data.uptime_seconds)}s`);
+            } else {
+                updateStatus('laptop', false, 'OFFLINE', laptopTest.error);
+            }
+            
+            // Test phone server health  
+            const phoneTest = await testAPI(`${PHONE_URL}/health`, 'Phone Health', false);
+            if (phoneTest.success) {
+                updateStatus('phone', true, 'ONLINE', `Node: ${phoneTest.data.node_id} | Uptime: ${Math.floor(phoneTest.data.uptime_seconds)}s`);
+            } else {
+                updateStatus('phone', false, 'OFFLINE', phoneTest.error);
+            }
+            
+            // Test API authentication with nodes endpoint
+            const authTest = await testAPI(`${LAPTOP_URL}/nodes`, 'Authenticated API', true);
+            if (authTest.success && authTest.status === 200) {
+                updateStatus('auth', true, 'AUTHENTICATED', `✅ API Key valid | Found ${authTest.data.length} nodes`);
+            } else {
+                updateStatus('auth', false, 'AUTH FAILED', authTest.error || 'API key rejected');
+            }
+            
+            // Show detailed test results
+            const results = [
+                { name: 'Laptop Health', ...laptopTest },
+                { name: 'Phone Health', ...phoneTest },  
+                { name: 'API Authentication', ...authTest }
+            ];
+            
+            const resultsHTML = results.map(result => `
+                <div class="api-test ${result.success ? 'success' : 'error'}">
+                    <strong>${result.success ? '✅' : '❌'} ${result.name}</strong>
+                    <div style="margin-top: 8px;">
+                        ${result.success ? 
+                            `<div style="color: var(--green-300);">Status: ${result.status} OK</div>
+                             <pre>${JSON.stringify(result.data, null, 2).substring(0, 500)}${JSON.stringify(result.data, null, 2).length > 500 ? '...' : ''}</pre>` :
+                            `<div style="color: var(--red-400);">Error: ${result.error}</div>`
+                        }
+                    </div>
+                </div>
+            `).join('');
+            
+            document.getElementById('test-results').innerHTML = `
+                <div class="card">
+                    <div class="card-title">API Test Results</div>
+                    ${resultsHTML}
+                </div>
+            `;
+        }
+        
+        // Auto-test on load and refresh every 10 seconds
+        testAllConnections();
+        setInterval(testAllConnections, 10000);
+    </script>
+</body>
+</html>
