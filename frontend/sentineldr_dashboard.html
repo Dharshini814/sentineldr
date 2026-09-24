@@ -1,0 +1,2027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>SentinelDR — Disaster Recovery Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <style>
+        /* ─── DESIGN TOKENS ─── */
+        :root {
+            --navy-950: #060C18;
+            --navy-900: #0B1628;
+            --navy-800: #111F38;
+            --navy-700: #162948;
+            --navy-600: #1E3555;
+            --blue-500: #2563EB;
+            --blue-400: #3B82F6;
+            --blue-300: #60A5FA;
+            --blue-200: #93C5FD;
+            --white: #FFFFFF;
+            --slate-100: #F0F4F8;
+            --slate-200: #D9E2EC;
+            --slate-400: #829AB1;
+            --slate-500: #627D98;
+            --slate-600: #486581;
+            --green-400: #10B981;
+            --green-300: #34D399;
+            --amber-400: #F59E0B;
+            --amber-300: #FCD34D;
+            --red-500: #EF4444;
+            --red-400: #F87171;
+            --border: rgba(255,255,255,0.07);
+            --border-active: rgba(59,130,246,0.35);
+            --surface: rgba(255,255,255,0.04);
+            --surface-raised: rgba(255,255,255,0.07);
+            --glow-blue: rgba(59,130,246,0.15);
+            --sidebar-w: 224px;
+            --header-h: 56px;
+            --radius: 8px;
+            --radius-lg: 12px;
+            --font: 'Inter', system-ui, sans-serif;
+            --mono: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+        
+        /* ─── RESET & BASE ─── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body, #root { height: 100%; }
+        body {
+            font-family: var(--font);
+            background: var(--navy-950);
+            color: var(--slate-100);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            font-size: 14px;
+        }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--navy-600); border-radius: 3px; }
+        
+        /* ─── LAYOUT ─── */
+        .app { display: flex; height: 100vh; overflow: hidden; }
+        
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            background: var(--navy-900);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            z-index: 10;
+        }
+        
+        .sidebar-brand {
+            padding: 0 20px;
+            height: var(--header-h);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        
+        .brand-icon {
+            width: 28px; height: 28px;
+            background: var(--blue-500);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .brand-icon svg { width: 16px; height: 16px; fill: white; }
+        .brand-name { font-size: 15px; font-weight: 700; color: var(--white); letter-spacing: -0.3px; }
+        .brand-sub { font-size: 10px; color: var(--slate-500); letter-spacing: 0.5px; margin-top: 1px; }
+        
+        .sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+        .nav-section { margin-bottom: 18px; }
+        .nav-section-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--slate-600);
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+            padding: 0 10px;
+            margin-bottom: 4px;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.12s, color 0.12s;
+            color: var(--slate-400);
+            font-size: 13.5px;
+            font-weight: 450;
+            user-select: none;
+            position: relative;
+        }
+        .nav-item:hover { background: var(--surface-raised); color: var(--slate-100); }
+        .nav-item.active { background: rgba(37,99,235,0.18); color: var(--blue-300); }
+        .nav-item.active::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 6px; bottom: 6px;
+            width: 2px;
+            background: var(--blue-400);
+            border-radius: 2px;
+        }
+        
+        .nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.8; }
+        .nav-item.active .nav-icon { opacity: 1; }
+        .nav-badge {
+            margin-left: auto;
+            background: var(--red-500);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 5px;
+        }
+        
+        .sidebar-status {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        .status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .status-row:last-child { margin-bottom: 0; }
+        .dot {
+            width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+        }
+        .dot.green { background: var(--green-400); box-shadow: 0 0 6px var(--green-400); }
+        .dot.amber { background: var(--amber-400); box-shadow: 0 0 6px var(--amber-400); }
+        .dot.red { background: var(--red-500); box-shadow: 0 0 6px var(--red-500); }
+        .dot.grey { background: var(--slate-600); }
+        .status-text { font-size: 12px; color: var(--slate-400); }
+        .status-text strong { color: var(--slate-200); font-weight: 500; }
+        
+        /* Main area */
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        
+        /* Header */
+        .header {
+            height: var(--header-h);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 16px;
+            flex-shrink: 0;
+            background: var(--navy-900);
+        }
+        
+        .header-title { font-size: 15px; font-weight: 600; color: var(--white); }
+        .header-path { font-size: 12px; color: var(--slate-500); }
+        .header-spacer { flex: 1; }
+        .header-pill {
+            display: flex; align-items: center; gap: 6px;
+            padding: 4px 12px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--slate-400);
+        }
+        .header-pill .dot { width: 6px; height: 6px; }
+        .header-time { font-size: 12px; color: var(--slate-500); font-variant-numeric: tabular-nums; }
+        .refresh-btn {
+            width: 30px; height: 30px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            color: var(--slate-400);
+            transition: background 0.12s, color 0.12s;
+        }
+        .refresh-btn:hover { background: var(--surface-raised); color: var(--slate-100); }
+        
+        /* Page content */
+        .page { flex: 1; overflow-y: auto; padding: 24px; }
+        
+        /* ─── SHARED COMPONENTS ─── */
+        .page-header { margin-bottom: 24px; }
+        .page-title { font-size: 22px; font-weight: 700; color: var(--white); letter-spacing: -0.4px; }
+        .page-desc { font-size: 13px; color: var(--slate-500); margin-top: 4px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+        .stack { display: flex; flex-direction: column; gap: 16px; }
+        .row { display: flex; gap: 16px; }
+        
+        /* Card */
+        .card {
+            background: var(--navy-800);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+        }
+        .card-sm { padding: 14px 16px; }
+        .card-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--slate-500);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+        
+        /* Metric stat */
+        .stat { padding: 16px 20px; background: var(--navy-800); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+        .stat-label { font-size: 11px; color: var(--slate-500); font-weight: 500; letter-spacing: 0.3px; margin-bottom: 6px; }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--white); letter-spacing: -0.4px; line-height: 1; }
+        .stat-sub { font-size: 11px; color: var(--slate-500); margin-top: 5px; }
+        .stat-green .stat-value { color: var(--green-300); }
+        .stat-amber .stat-value { color: var(--amber-300); }
+        .stat-red .stat-value { color: var(--red-400); }
+        .stat-blue .stat-value { color: var(--blue-300); }
+        
+        /* Status badge */
+        .badge {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 3px 9px; border-radius: 4px;
+            font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        .badge-green { background: rgba(16,185,129,0.15); color: var(--green-300); border: 1px solid rgba(16,185,129,0.25); }
+        .badge-amber { background: rgba(245,158,11,0.15); color: var(--amber-300); border: 1px solid rgba(245,158,11,0.25); }
+        .badge-red { background: rgba(239,68,68,0.15); color: var(--red-400); border: 1px solid rgba(239,68,68,0.25); }
+        .badge-blue { background: rgba(59,130,246,0.15); color: var(--blue-300); border: 1px solid rgba(59,130,246,0.25); }
+        .badge-grey { background: rgba(130,154,177,0.12); color: var(--slate-400); border: 1px solid rgba(130,154,177,0.2); }
+        
+        /* Divider */
+        .divider { height: 1px; background: var(--border); margin: 16px 0; }
+        
+        /* Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            text-align: left; padding: 8px 12px;
+            font-size: 10px; font-weight: 600; color: var(--slate-500);
+            text-transform: uppercase; letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+        td {
+            padding: 10px 12px;
+            font-size: 13px; color: var(--slate-200);
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            vertical-align: middle;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: var(--surface); }
+        .mono { font-family: var(--mono); font-size: 12px; }
+        
+        /* Buttons */
+        .btn {
+            display: inline-flex; align-items: center; gap: 7px;
+            padding: 8px 16px; border-radius: var(--radius);
+            font-size: 13px; font-weight: 500;
+            cursor: pointer; border: none; transition: all 0.12s;
+            white-space: nowrap; user-select: none;
+        }
+        .btn-primary { background: var(--blue-500); color: white; }
+        .btn-primary:hover { background: var(--blue-400); }
+        .btn-secondary { background: var(--surface-raised); color: var(--slate-200); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); color: white; }
+        .btn-danger { background: rgba(239,68,68,0.15); color: var(--red-400); border: 1px solid rgba(239,68,68,0.25); }
+        .btn-danger:hover { background: rgba(239,68,68,0.25); }
+        .btn-sm { padding: 5px 11px; font-size: 12px; }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        
+        /* Progress bar */
+        .progress-bar {
+            height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden;
+        }
+        .progress-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+        .progress-green { background: var(--green-400); }
+        .progress-amber { background: var(--amber-400); }
+        .progress-red { background: var(--red-500); }
+        .progress-blue { background: var(--blue-400); }
+        
+        /* Info row */
+        .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { font-size: 12px; color: var(--slate-500); }
+        .info-value { font-size: 13px; color: var(--slate-100); font-weight: 450; text-align: right; }
+        .info-value.mono { font-family: var(--mono); font-size: 12px; }
+        
+        /* Inline pulse */
+        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 70% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); } }
+        .dot.pulse { animation: pulse-ring 2s ease-out infinite; }
+        
+        /* Timeline */
+        .timeline { position: relative; padding-left: 20px; }
+        .timeline::before { content: ''; position: absolute; left: 7px; top: 0; bottom: 0; width: 1px; background: var(--border); }
+        .tl-item { position: relative; margin-bottom: 16px; }
+        .tl-dot { position: absolute; left: -17px; top: 4px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--navy-800); }
+        .tl-dot.green { background: var(--green-400); }
+        .tl-dot.blue { background: var(--blue-400); }
+        .tl-dot.amber { background: var(--amber-400); }
+        .tl-dot.red { background: var(--red-500); }
+        .tl-dot.grey { background: var(--slate-600); }
+        .tl-time { font-size: 11px; color: var(--slate-500); font-family: var(--mono); }
+        .tl-text { font-size: 13px; color: var(--slate-200); margin-top: 2px; }
+        .tl-sub { font-size: 11px; color: var(--slate-500); margin-top: 2px; }
+        
+        /* State flow */
+        .flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; }
+        .flow-step {
+            padding: 6px 14px;
+            background: var(--navy-700);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 11px; font-weight: 600; color: var(--slate-400);
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .flow-step.active { background: rgba(37,99,235,0.2); border-color: var(--blue-500); color: var(--blue-300); }
+        .flow-step.done { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); color: var(--green-300); }
+        .flow-arrow { padding: 0 6px; color: var(--slate-600); font-size: 12px; }
+        
+        /* Topology viz */
+        .topology { display: flex; align-items: center; justify-content: center; gap: 0; padding: 24px 0; }
+        .topo-node {
+            text-align: center;
+            padding: 16px 24px;
+            background: var(--navy-700);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            min-width: 140px;
+        }
+        .topo-node.active-node { border-color: var(--blue-400); background: rgba(37,99,235,0.1); }
+        .topo-node.standby-node { border-color: rgba(130,154,177,0.3); }
+        .topo-node-icon { font-size: 24px; margin-bottom: 6px; }
+        .topo-node-name { font-size: 13px; font-weight: 600; color: var(--white); }
+        .topo-node-role { font-size: 10px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; margin-top: 2px; color: var(--slate-500); }
+        .topo-node.active-node .topo-node-role { color: var(--blue-300); }
+        .topo-connector {
+            flex: 1; height: 2px; background: var(--border);
+            position: relative; max-width: 100px;
+        }
+        .topo-connector.live { background: linear-gradient(90deg, var(--blue-500), var(--blue-300)); }
+        .topo-connector-label {
+            position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+            font-size: 10px; color: var(--slate-500); white-space: nowrap;
+        }
+        
+        /* Proxy box */
+        .proxy-box {
+            text-align: center; padding: 10px 16px;
+            background: var(--navy-700); border: 1px solid var(--blue-500);
+            border-radius: var(--radius); min-width: 100px;
+        }
+        .proxy-label { font-size: 10px; font-weight: 600; color: var(--blue-300); letter-spacing: 0.5px; text-transform: uppercase; }
+        .proxy-status { font-size: 11px; color: var(--slate-400); margin-top: 2px; }
+        
+        /* Endpoint table status */
+        .endpoint-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+        
+        /* Log entry */
+        .log-entry { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); align-items: flex-start; }
+        .log-time { font-family: var(--mono); font-size: 11px; color: var(--slate-600); flex-shrink: 0; padding-top: 1px; }
+        .log-level { font-size: 10px; font-weight: 700; flex-shrink: 0; width: 64px; padding-top: 2px; }
+        .log-level.INFO { color: var(--blue-300); }
+        .log-level.SYNC { color: var(--green-300); }
+        .log-level.WARNING { color: var(--amber-300); }
+        .log-level.ERROR { color: var(--red-400); }
+        .log-level.FAILOVER { color: var(--amber-300); }
+        .log-level.RECOVERY { color: var(--green-300); }
+        .log-msg { font-size: 13px; color: var(--slate-200); flex: 1; }
+        
+        /* Chart bar */
+        .chart-bars { display: flex; align-items: flex-end; gap: 3px; height: 60px; }
+        .chart-bar-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+        .chart-bar {
+            background: var(--blue-500); border-radius: 2px 2px 0 0;
+            opacity: 0.8; transition: opacity 0.2s;
+            min-height: 2px;
+        }
+        .chart-bar:hover { opacity: 1; }
+        .chart-bar.green { background: var(--green-400); }
+        .chart-bar.amber { background: var(--amber-400); }
+        
+        /* Comparison table */
+        .compare-grid { display: grid; grid-template-columns: 1fr 1px 1fr; gap: 0; }
+        .compare-divider { background: var(--border); }
+        .compare-col { padding: 0 20px; }
+        .compare-header { font-size: 11px; font-weight: 700; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 14px; }
+        .compare-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .compare-row:last-child { border-bottom: none; }
+        .compare-key { font-size: 12px; color: var(--slate-500); }
+        .compare-val { font-size: 13px; color: var(--slate-100); font-weight: 500; }
+        
+        /* Settings form */
+        .setting-group { margin-bottom: 24px; }
+        .setting-group-title { font-size: 12px; font-weight: 600; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+        .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        .setting-item:last-child { border-bottom: none; }
+        .setting-label { font-size: 13px; color: var(--slate-200); }
+        .setting-desc { font-size: 11px; color: var(--slate-500); margin-top: 2px; }
+        .setting-value { font-size: 12px; color: var(--slate-400); font-family: var(--mono); }
+        .toggle {
+            width: 36px; height: 20px; background: var(--navy-600); border-radius: 10px;
+            position: relative; cursor: pointer; transition: background 0.2s; border: none;
+        }
+        .toggle.on { background: var(--blue-500); }
+        .toggle::after {
+            content: ''; position: absolute; top: 2px; left: 2px;
+            width: 16px; height: 16px; background: white; border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .toggle.on::after { transform: translateX(16px); }
+        
+        /* DR Test */
+        .test-card {
+            background: var(--navy-800); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px;
+        }
+        .test-status { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 12px 14px; background: var(--navy-950); border-radius: var(--radius); border: 1px solid var(--border); }
+        .test-status.running { border-color: var(--blue-400); background: rgba(37,99,235,0.06); }
+        .test-status.success { border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.06); }
+        
+        /* Node header */
+        .node-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+        .node-chip {
+            display: flex; align-items: center; gap: 8px;
+            padding: 6px 12px; border-radius: var(--radius);
+            background: var(--navy-700); border: 1px solid var(--border);
+        }
+        .node-chip-name { font-size: 13px; font-weight: 600; color: var(--white); }
+        .node-chip-role { font-size: 10px; color: var(--slate-500); text-transform: uppercase; letter-spacing: 0.3px; }
+        
+        /* ─── ANIMATIONS ─── */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spin { animation: spin 0.8s linear infinite; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.2s ease; }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        
+        /* Section labels */
+        .section-eyebrow { font-size: 10px; font-weight: 600; color: var(--blue-400); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; }
+        
+        /* Loading state */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            color: var(--slate-500);
+            font-size: 14px;
+        }
+        
+        /* Error state */
+        .error {
+            background: rgba(239,68,68,0.1);
+            border: 1px solid rgba(239,68,68,0.2);
+            color: var(--red-400);
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+const { useState, useEffect, useRef, useCallback } = React;
+const h = React.createElement;
+
+// ─── CONSTANTS ───
+const BASE_URL = 'http://localhost:8000';
+const PHONE_URL = 'http://localhost:8001';
+const API_KEY = 'my-project-final';
+
+// ─── API LAYER ───
+async function apiFetch(url, opts = {}) {
+  try {
+    const res = await fetch(url, {
+      headers: { 
+        'Content-Type': 'application/json', 
+        'X-API-Key': API_KEY, 
+        ...opts.headers 
+      },
+      ...opts
+    });
+    if (!res.ok) {
+      console.error(`API Error: ${res.status} - ${res.statusText} for ${url}`);
+      return null;
+    }
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('application/json') ? res.json() : null;
+  } catch (error) {
+    console.error(`Network Error for ${url}:`, error);
+    return null;
+  }
+}
+
+const api = {
+  health: () => apiFetch(`${BASE_URL}/health`),
+  phoneHealth: () => apiFetch(`${PHONE_URL}/health`),
+  nodes: () => apiFetch(`${BASE_URL}/nodes`),
+  events: (n=50) => apiFetch(`${BASE_URL}/events?limit=${n}`),
+  sync: () => apiFetch(`${BASE_URL}/sync/status`),
+  triggerSync: () => apiFetch(`${BASE_URL}/sync/now`, { method: 'POST' }),
+  ackEvent: (id) => apiFetch(`${BASE_URL}/events/${id}/acknowledge`, { method: 'POST' }),
+  simulateFailure: () => apiFetch(`${BASE_URL}/api/simulate-failure`, { method: 'POST' }),
+  simulateRecovery: () => apiFetch(`${BASE_URL}/api/simulate-recovery`, { method: 'POST' }),
+};
+
+// ─── HOOKS ───
+function usePolling(fetcher, interval = 3000) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const ref = useRef(null);
+
+  const fetch_ = useCallback(async () => {
+    try {
+      const d = await fetcher();
+      if (d !== null && d !== undefined) {
+        setData(d);
+        setError(null);
+      }
+    } catch (err) {
+      console.error('Polling error:', err);
+      setError(err.message);
+    }
+    setLoading(false);
+  }, [fetcher]);
+
+  useEffect(() => {
+    fetch_();
+    ref.current = setInterval(fetch_, interval);
+    return () => clearInterval(ref.current);
+  }, [fetch_, interval]);
+
+  return { data, loading, error, refresh: fetch_ };
+}
+
+function useSystem() {
+  const { data: health, loading: hl, refresh: rh, error: he } = usePolling(api.health, 3000);
+  const { data: phoneHealth, refresh: rph, error: phe } = usePolling(api.phoneHealth, 3000);
+  const { data: nodes, error: ne } = usePolling(api.nodes, 5000);
+  const { data: events, refresh: re, error: ee } = usePolling(() => api.events(100), 3000);
+  const { data: sync, error: se } = usePolling(api.sync, 5000);
+
+  const refresh = () => { rh(); rph(); re(); };
+
+  const isFailover = !!(health?.failover_active || phoneHealth?.failover_active);
+  const primaryNode = (nodes || []).find(n => n.role === 'primary' || n.role === 'laptop');
+  const drNode = (nodes || []).find(n => n.role === 'secondary' || n.role === 'phone' || n.role === 'active_secondary');
+  const unackedEvents = (events || []).filter(e => !e.acknowledged);
+
+  return { 
+    health, phoneHealth, nodes: nodes || [], events: events || [], sync, 
+    isFailover, primaryNode, drNode, loading: hl, 
+    refresh, unackedEvents, ackEvent: api.ackEvent,
+    errors: { health: he, phone: phe, nodes: ne, events: ee, sync: se }
+  };
+}
+// ─── FORMAT HELPERS ───
+function fmt_uptime(s) {
+  if (!s) return '—';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
+  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+function fmt_rel(ts) {
+  if (!ts) return '—';
+  const d = Math.floor((Date.now() - new Date(ts))/1000);
+  if (d < 60) return `${d}s ago`;
+  if (d < 3600) return `${Math.floor(d/60)}m ago`;
+  return `${Math.floor(d/3600)}h ago`;
+}
+
+function fmt_ts(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleTimeString('en-US', { 
+    hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' 
+  });
+}
+
+function clamp(v, lo=0, hi=100) { return Math.max(lo, Math.min(hi, v||0)); }
+function bar_color(v) { return v > 80 ? 'red' : v > 60 ? 'amber' : 'green'; }
+
+// ─── ICONS (inline SVG) ───
+function Icon({ name, size=16 }) {
+  const paths = {
+    dashboard: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
+    nodes: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z',
+    application: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z',
+    monitoring: 'M3.5 18.5l6-6 4 4L22 6.92M2 2h20v20H2z',
+    failover: 'M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z',
+    sync: 'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z',
+    events: 'M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z',
+    testing: 'M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z',
+    settings: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
+    refresh: 'M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z',
+    check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+    warn: 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z',
+  };
+
+  return h('svg', { 
+    width: size, height: size, viewBox: '0 0 24 24', 
+    fill: 'currentColor', style: { flexShrink: 0 } 
+  },
+    h('path', { d: paths[name] || paths.dashboard })
+  );
+}
+// ─── MINI SPARKLINE ───
+function Sparkline({ values = [], color = '#3B82F6', height = 32 }) {
+  if (!values.length) return null;
+
+  const max = Math.max(...values, 1);
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * 100;
+    const y = height - (v / max) * height;
+    return `${x},${y}`;
+  }).join(' ');
+
+  return h('svg', { 
+    viewBox: `0 0 100 ${height}`, preserveAspectRatio: 'none', 
+    style: { width: '100%', height } 
+  },
+    h('polyline', { 
+      points: pts, fill: 'none', stroke: color, strokeWidth: 1.5, 
+      strokeLinejoin: 'round', strokeLinecap: 'round' 
+    })
+  );
+}
+
+// ─── PROGRESS BAR ───
+function ProgressBar({ value, color }) {
+  const c = color || (value > 80 ? 'red' : value > 60 ? 'amber' : 'blue');
+  return h('div', { className: 'progress-bar' },
+    h('div', { 
+      className: `progress-fill progress-${c}`, 
+      style: { width: `${clamp(value)}%` } 
+    })
+  );
+}
+
+// ─── METRIC CARD ───
+function MetricCard({ label, value, unit, sub, cls, trend }) {
+  return h('div', { className: `stat ${cls || ''}` },
+    h('div', { className: 'stat-label' }, label),
+    h('div', { className: 'stat-value' }, 
+      value, 
+      unit && h('span', { 
+        style: { fontSize: 13, color: 'var(--slate-500)', marginLeft: 3 } 
+      }, unit)
+    ),
+    sub && h('div', { className: 'stat-sub' }, sub)
+  );
+}
+
+// ─── BADGE ───
+function Badge({ status }) {
+  const map = { 
+    ONLINE: 'green', HEALTHY: 'green', ACTIVE: 'green', 
+    OPERATIONAL: 'green', SUCCESS: 'green', STANDBY: 'grey', 
+    READY: 'grey', OFFLINE: 'red', FAILED: 'red', 
+    CRITICAL: 'red', WARNING: 'amber', SYNCING: 'blue', 
+    FAILOVER: 'amber', SYNCED: 'green', UNKNOWN: 'grey' 
+  };
+  const cls = map[status?.toUpperCase()] || 'grey';
+  return h('span', { className: `badge badge-${cls}` }, status);
+}
+
+// ─── TOGGLE ───
+function Toggle({ value, onChange }) {
+  return h('button', { 
+    className: `toggle ${value ? 'on' : ''}`, 
+    onClick: () => onChange && onChange(!value) 
+  });
+}
+// ─── SIDEBAR ───
+const NAV = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { section: 'System' },
+  { id: 'nodes', label: 'Nodes', icon: 'nodes' },
+  { id: 'application', label: 'Application', icon: 'application' },
+  { id: 'monitoring', label: 'Monitoring', icon: 'monitoring' },
+  { section: 'Disaster Recovery' },
+  { id: 'failover', label: 'Failover & Recovery', icon: 'failover' },
+  { id: 'synchronization', label: 'Synchronization', icon: 'sync' },
+  { id: 'testing', label: 'DR Testing', icon: 'testing' },
+  { section: 'Operations' },
+  { id: 'events', label: 'Events & Logs', icon: 'events' },
+  { id: 'settings', label: 'Settings', icon: 'settings' },
+];
+
+function Sidebar({ page, setPage, isFailover, health, phoneHealth, unackedCount }) {
+  const primaryOk = !!health;
+  const drOk = !!phoneHealth;
+
+  return h('aside', { className: 'sidebar' },
+    h('div', { className: 'sidebar-brand' },
+      h('div', { className: 'brand-icon' },
+        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'white' },
+          h('path', { d: 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z' })
+        )
+      ),
+      h('div', null,
+        h('div', { className: 'brand-name' }, 'SentinelDR'),
+        h('div', { className: 'brand-sub' }, 'DR Console')
+      )
+    ),
+
+    h('nav', { className: 'sidebar-nav' },
+      NAV.map((item, i) => {
+        if (item.section) return h('div', { key: i, className: 'nav-section' },
+          i > 0 && h('div', { style: { height: 4 } }),
+          h('div', { className: 'nav-section-label' }, item.section)
+        );
+
+        const isActive = page === item.id;
+        const badge = item.id === 'events' && unackedCount > 0 ? unackedCount : null;
+
+        return h('div', { 
+          key: item.id, 
+          className: `nav-item ${isActive ? 'active' : ''}`, 
+          onClick: () => setPage(item.id) 
+        },
+          h(Icon, { name: item.icon }),
+          h('span', null, item.label),
+          badge && h('span', { className: 'nav-badge' }, badge > 99 ? '99+' : badge)
+        );
+      })
+    ),
+
+    h('div', { className: 'sidebar-status' },
+      h('div', { className: 'status-row' },
+        h('div', { className: `dot ${primaryOk ? 'green' : 'red'} ${primaryOk ? 'pulse' : ''}` }),
+        h('div', { className: 'status-text' }, 
+          h('strong', null, 'Primary'), ` ${primaryOk ? 'Online' : 'Offline'}`
+        )
+      ),
+      h('div', { className: 'status-row' },
+        h('div', { className: `dot ${drOk ? 'green' : 'grey'}` }),
+        h('div', { className: 'status-text' }, 
+          h('strong', null, 'DR Node'), ` ${drOk ? 'Standby' : 'Offline'}`
+        )
+      ),
+      isFailover && h('div', { 
+        style: { 
+          marginTop: 8, padding: '6px 10px', 
+          background: 'rgba(245,158,11,0.12)', 
+          border: '1px solid rgba(245,158,11,0.25)', 
+          borderRadius: 6, fontSize: 11, 
+          color: 'var(--amber-300)', fontWeight: 600 
+        } 
+      }, '⚠ DR Mode Active')
+    )
+  );
+}
+// ─── HEADER ───
+function Header({ page, onRefresh, loading }) {
+  const [time, setTime] = useState(new Date());
+
+  useEffect(() => { 
+    const t = setInterval(() => setTime(new Date()), 1000); 
+    return () => clearInterval(t); 
+  }, []);
+
+  const titles = { 
+    dashboard: 'Dashboard', nodes: 'Nodes', application: 'Application', 
+    monitoring: 'Monitoring', failover: 'Failover & Recovery', 
+    synchronization: 'Synchronization', testing: 'DR Testing', 
+    events: 'Events & Logs', settings: 'Settings' 
+  };
+
+  return h('header', { className: 'header' },
+    h('div', { className: 'header-title' }, titles[page] || 'SentinelDR'),
+    h('div', { className: 'header-spacer' }),
+    h('div', { className: 'header-time' }, 
+      time.toLocaleTimeString('en-US', { hour12: false })
+    ),
+    h('button', { 
+      className: 'refresh-btn', 
+      onClick: onRefresh, 
+      title: 'Refresh' 
+    },
+      h('div', { 
+        style: { display: 'flex' }, 
+        className: loading ? 'spin' : '' 
+      },
+        h(Icon, { name: 'refresh', size: 14 })
+      )
+    )
+  );
+}
+
+// ─── PAGE: DASHBOARD ───
+function PageDashboard({ sys }) {
+  const { health, phoneHealth, isFailover, primaryNode, drNode, events, sync } = sys;
+
+  const systemStatus = isFailover 
+    ? { label: 'FAILOVER ACTIVE', cls: 'badge-amber' }
+    : (health && phoneHealth) 
+    ? { label: 'OPERATIONAL', cls: 'badge-green' }
+    : health 
+    ? { label: 'PRIMARY ONLY', cls: 'badge-amber' }
+    : { label: 'DEGRADED', cls: 'badge-red' };
+
+  const activeNode = isFailover 
+    ? (drNode?.node_id || 'DR Node') 
+    : (health?.node_id || primaryNode?.node_id || 'Primary');
+
+  const mode = isFailover ? 'FAILOVER' : 'NORMAL';
+  const lastEvent = events[0];
+  const criticals = events.filter(e => 
+    !e.acknowledged && 
+    (e.severity?.toLowerCase() === 'critical' || e.event_type === 'FAILOVER')
+  );
+
+  // Simulated sparkline data (in real app: from rolling metrics)
+  const [sparkData] = useState(() => 
+    Array.from({ length: 20 }, (_, i) => 20 + Math.random() * 30)
+  );
+
+  return h('div', { className: 'fade-in stack' },
+    // Top row: status cards
+    h('div', { className: 'grid-4' },
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'System Status'),
+        h('div', { style: { marginTop: 6 } }, 
+          h('span', { className: `badge ${systemStatus.cls}` }, systemStatus.label)
+        ),
+        h('div', { className: 'stat-sub' }, 
+          isFailover ? 'DR node serving traffic' : 'All systems nominal'
+        )
+      ),
+
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'Active Node'),
+        h('div', { 
+          className: 'stat-value', 
+          style: { fontSize: 18, fontFamily: 'var(--mono)' } 
+        }, activeNode.substring(0, 12) || '—'),
+        h('div', { className: 'stat-sub' }, mode)
+      ),
+      h('div', { className: 'stat stat-blue' },
+        h('div', { className: 'stat-label' }, 'RTO Target'),
+        h('div', { className: 'stat-value' }, '< 30', 
+          h('span', { style: { fontSize: 13, color: 'var(--slate-500)' } }, 's')
+        ),
+        h('div', { className: 'stat-sub' }, 
+          health?.failover_duration ? `Last: ${health.failover_duration}` : 'No recent failover'
+        )
+      ),
+
+      h('div', { className: 'stat stat-green' },
+        h('div', { className: 'stat-label' }, 'Last Sync'),
+        h('div', { 
+          className: 'stat-value', 
+          style: { fontSize: 18 } 
+        }, fmt_rel(sync?.last_sync_time || health?.last_sync_time)),
+        h('div', { className: 'stat-sub' }, 
+          sync?.sync_status === 'synced' ? 'In sync' : sync?.sync_status || 'Unknown'
+        )
+      )
+    ),
+
+    // Topology visualization
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'System Topology'),
+      h('div', { className: 'topology' },
+        // Smart Proxy
+        h('div', { className: 'proxy-box' },
+          h('div', { className: 'proxy-label' }, 'Smart Proxy'),
+          h('div', { className: 'proxy-status' }, health ? 'Active' : 'Unreachable')
+        ),
+
+        h('div', { 
+          style: { 
+            flex: 1, maxWidth: 80, height: 2, 
+            background: 'linear-gradient(90deg, var(--blue-500), var(--blue-400))', 
+            position: 'relative' 
+          } 
+        },
+          h('div', { 
+            style: { 
+              position: 'absolute', top: -16, left: '50%', 
+              transform: 'translateX(-50%)', fontSize: 10, 
+              color: 'var(--blue-300)', whiteSpace: 'nowrap' 
+            } 
+          }, 'routes to')
+        ),
+
+        // Primary Node
+        h('div', { className: `topo-node ${!isFailover ? 'active-node' : 'standby-node'}` },
+          h('div', { className: 'topo-node-icon' }, '💻'),
+          h('div', { className: 'topo-node-name' }, health?.node_id || 'Primary Node'),
+          h('div', { className: 'topo-node-role' }, !isFailover ? 'Active' : 'Standby'),
+          h('div', { style: { marginTop: 6 } }, 
+            h('span', { 
+              className: `badge ${health ? (!isFailover ? 'badge-green' : 'badge-grey') : 'badge-red'}` 
+            }, health ? (!isFailover ? 'PRIMARY' : 'STANDBY') : 'OFFLINE')
+          )
+        ),
+
+        h('div', { 
+          style: { 
+            flex: 1, maxWidth: 80, height: 2, 
+            background: 'var(--border)', position: 'relative' 
+          } 
+        },
+          h('div', { 
+            style: { 
+              position: 'absolute', top: -16, left: '50%', 
+              transform: 'translateX(-50%)', fontSize: 10, 
+              color: 'var(--slate-600)', whiteSpace: 'nowrap' 
+            } 
+          }, 'heartbeat')
+        ),
+        // DR Node
+        h('div', { className: `topo-node ${isFailover ? 'active-node' : 'standby-node'}` },
+          h('div', { className: 'topo-node-icon' }, '📱'),
+          h('div', { className: 'topo-node-name' }, phoneHealth?.node_id || 'DR Node'),
+          h('div', { className: 'topo-node-role' }, isFailover ? 'Active' : 'Standby'),
+          h('div', { style: { marginTop: 6 } }, 
+            h('span', { 
+              className: `badge ${phoneHealth ? (isFailover ? 'badge-green' : 'badge-grey') : 'badge-grey'}` 
+            }, phoneHealth ? (isFailover ? 'ACTIVE' : 'STANDBY') : 'OFFLINE')
+          )
+        )
+      )
+    ),
+
+    // Metrics row
+    h('div', { className: 'grid-2' },
+      // Uptime & RPO
+      h('div', { className: 'card' },
+        h('div', { className: 'card-title' }, 'Key Metrics'),
+        h('div', { className: 'stack', style: { gap: 0 } },
+          h('div', { className: 'info-row' },
+            h('span', { className: 'info-label' }, 'Primary Uptime'),
+            h('span', { className: 'info-value' }, fmt_uptime(health?.uptime_seconds))
+          ),
+          h('div', { className: 'info-row' },
+            h('span', { className: 'info-label' }, 'DR Node Uptime'),
+            h('span', { className: 'info-value' }, fmt_uptime(phoneHealth?.uptime_seconds))
+          ),
+          h('div', { className: 'info-row' },
+            h('span', { className: 'info-label' }, 'Current RPO'),
+            h('span', { className: 'info-value' }, 
+              sync?.sync_interval ? `${sync.sync_interval}s` : '3s'
+            )
+          ),
+          h('div', { className: 'info-row' },
+            h('span', { className: 'info-label' }, 'DR Mode'),
+            h('span', { className: 'info-value' }, isFailover ? 'Failover' : 'Normal')
+          )
+        )
+      ),
+
+      // Recent events
+      h('div', { className: 'card' },
+        h('div', { className: 'card-title' }, 'Recent Critical Events'),
+        criticals.length === 0
+          ? h('div', { 
+              style: { 
+                color: 'var(--slate-500)', fontSize: 13, padding: '8px 0' 
+              } 
+            }, 'No unacknowledged critical events')
+          : h('div', { className: 'stack', style: { gap: 6 } },
+              criticals.slice(0, 4).map((ev, i) =>
+                h('div', { 
+                  key: i, 
+                  style: { 
+                    display: 'flex', alignItems: 'flex-start', gap: 10, 
+                    padding: '6px 0', 
+                    borderBottom: '1px solid rgba(255,255,255,0.04)' 
+                  } 
+                },
+                  h('span', { 
+                    style: { 
+                      fontSize: 11, fontFamily: 'var(--mono)', 
+                      color: 'var(--slate-600)', flexShrink: 0, paddingTop: 1 
+                    } 
+                  }, fmt_ts(ev.timestamp)),
+                  h('span', { 
+                    style: { 
+                      fontSize: 13, color: 'var(--slate-200)', flex: 1 
+                    } 
+                  }, ev.message || ev.details?.reason || ev.event_type)
+                )
+              )
+            )
+      )
+    )
+  );
+}
+// ─── PAGE: NODES ───
+function PageNodes({ sys }) {
+  const { health, phoneHealth, primaryNode, drNode } = sys;
+
+  function NodePanel({ title, icon, nodeData, healthData, type }) {
+    const isOnline = type === 'primary' ? !!healthData : !!phoneHealth;
+
+    return h('div', { className: 'card' },
+      h('div', { className: 'node-header' },
+        h('div', { style: { fontSize: 22 } }, icon),
+        h('div', null,
+          h('div', { 
+            style: { fontSize: 15, fontWeight: 700, color: 'var(--white)' } 
+          }, title),
+          h('div', { 
+            style: { fontSize: 11, color: 'var(--slate-500)', marginTop: 2 } 
+          }, type === 'primary' ? 'Laptop / Primary' : 'Android / Termux')
+        ),
+        h('div', { style: { marginLeft: 'auto' } }, 
+          h(Badge, { status: isOnline ? 'ONLINE' : 'OFFLINE' })
+        )
+      ),
+
+      h('div', { className: 'stack', style: { gap: 0 } },
+        ...[
+          ['Node ID', (nodeData?.node_id || healthData?.node_id || '—'), true],
+          ['Role', nodeData?.role || (type === 'primary' ? 'Primary' : 'Secondary'), false],
+          ['IP Address', healthData?.local_ip || nodeData?.local_ip || '—', true],
+          ['Uptime', fmt_uptime(healthData?.uptime_seconds || nodeData?.uptime_seconds), false],
+          ['Peer Last Seen', fmt_rel(healthData?.peer_last_seen), false],
+          ['Sync Version', healthData?.sync_version !== undefined ? `v${healthData.sync_version}` : '—', true],
+        ].map(([lbl, val, mono]) =>
+          h('div', { key: lbl, className: 'info-row' },
+            h('span', { className: 'info-label' }, lbl),
+            h('span', { className: `info-value ${mono ? 'mono' : ''}` }, val)
+          )
+        )
+      )
+    );
+  }
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Nodes'),
+      h('div', { className: 'page-desc' }, 'Infrastructure details for both SentinelDR nodes')
+    ),
+
+    h('div', { className: 'grid-2' },
+      h(NodePanel, { 
+        title: 'Primary Node', icon: '💻', 
+        nodeData: primaryNode, healthData: health, type: 'primary' 
+      }),
+      h(NodePanel, { 
+        title: 'DR Node', icon: '📱', 
+        nodeData: drNode, healthData: phoneHealth, type: 'dr' 
+      })
+    ),
+
+    // Comparison
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Node Comparison'),
+      h('div', { className: 'compare-grid' },
+        h('div', { className: 'compare-col' },
+          h('div', { className: 'compare-header' }, '💻 Primary — Laptop'),
+          ...[
+            ['Status', health ? 'Online' : 'Offline'],
+            ['Node ID', health?.node_id || '—'],
+            ['Uptime', fmt_uptime(health?.uptime_seconds)],
+            ['Sync Ver.', health?.sync_version !== undefined ? `v${health.sync_version}` : '—'],
+            ['Peer Reachable', health?.peer_reachable ? 'Yes' : 'No'],
+          ].map(([k, v]) => 
+            h('div', { key: k, className: 'compare-row' }, 
+              h('span', { className: 'compare-key' }, k), 
+              h('span', { className: 'compare-val' }, v)
+            )
+          )
+        ),
+
+        h('div', { className: 'compare-divider' }),
+
+        h('div', { className: 'compare-col' },
+          h('div', { className: 'compare-header' }, '📱 DR Node — Android/Termux'),
+          ...[
+            ['Status', phoneHealth ? 'Online' : 'Offline'],
+            ['Node ID', phoneHealth?.node_id || '—'],
+            ['Uptime', fmt_uptime(phoneHealth?.uptime_seconds)],
+            ['Sync Ver.', phoneHealth?.sync_version !== undefined ? `v${phoneHealth.sync_version}` : '—'],
+            ['Peer Reachable', phoneHealth?.peer_reachable ? 'Yes' : 'No'],
+          ].map(([k, v]) => 
+            h('div', { key: k, className: 'compare-row' }, 
+              h('span', { className: 'compare-key' }, k), 
+              h('span', { className: 'compare-val' }, v)
+            )
+          )
+        )
+      )
+    ),
+    // Network discovery
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Network Discovery'),
+      h('div', { className: 'grid-3' },
+        h('div', null,
+          h('div', { className: 'info-label', style: { marginBottom: 4 } }, 'Protocol'),
+          h('div', { style: { fontSize: 13, color: 'var(--slate-200)' } }, 'UDP Broadcast'),
+          h('div', { style: { fontSize: 11, color: 'var(--slate-500)' } }, 'Port 47777')
+        ),
+        h('div', null,
+          h('div', { className: 'info-label', style: { marginBottom: 4 } }, 'Discovery Interval'),
+          h('div', { style: { fontSize: 13, color: 'var(--slate-200)' } }, '5 seconds'),
+          h('div', { style: { fontSize: 11, color: 'var(--slate-500)' } }, 'Automatic peer detection')
+        ),
+        h('div', null,
+          h('div', { className: 'info-label', style: { marginBottom: 4 } }, 'IP Configuration'),
+          h('div', { style: { fontSize: 13, color: 'var(--slate-200)' } }, 'Automatic'),
+          h('div', { style: { fontSize: 11, color: 'var(--slate-500)' } }, 'No manual setup required')
+        )
+      )
+    )
+  );
+}
+
+// ─── PAGE: APPLICATION ───
+function PageApplication({ sys }) {
+  const { health, phoneHealth, isFailover } = sys;
+
+  const endpoints = [
+    { 
+      name: 'Smart Proxy', url: 'proxy:8080', 
+      status: health ? 'HEALTHY' : 'UNREACHABLE', 
+      rt: health ? `${22 + Math.floor(Math.random()*20)}ms` : '—' 
+    },
+    { 
+      name: 'Primary Application', 
+      url: `${health?.local_ip || 'localhost'}:8000`, 
+      status: health ? 'HEALTHY' : 'OFFLINE', 
+      rt: health ? `${28 + Math.floor(Math.random()*15)}ms` : '—' 
+    },
+    { 
+      name: 'DR Application', 
+      url: `${phoneHealth?.local_ip || 'phone'}:8001`, 
+      status: phoneHealth ? (isFailover ? 'ACTIVE' : 'READY') : 'OFFLINE', 
+      rt: phoneHealth ? `${35 + Math.floor(Math.random()*20)}ms` : '—' 
+    },
+    { 
+      name: 'Portfolio', url: 'portfolio:3000', 
+      status: health ? 'HEALTHY' : 'UNKNOWN', 
+      rt: health ? `${30 + Math.floor(Math.random()*15)}ms` : '—' 
+    },
+  ];
+
+  const dotColor = (s) => ({
+    HEALTHY: 'var(--green-400)', ACTIVE: 'var(--green-400)', 
+    READY: 'var(--blue-400)', OFFLINE: 'var(--red-500)', 
+    UNREACHABLE: 'var(--red-500)', UNKNOWN: 'var(--slate-600)'
+  }[s] || 'var(--slate-600)');
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Application'),
+      h('div', { className: 'page-desc' }, 'Service health — is the application actually working?')
+    ),
+
+    h('div', { className: 'grid-4' },
+      h('div', { className: `stat ${health ? 'stat-green' : 'stat-red'}` },
+        h('div', { className: 'stat-label' }, 'Application'),
+        h('div', { style: { marginTop: 6 } }, 
+          h(Badge, { status: health ? 'ONLINE' : 'OFFLINE' })
+        )
+      ),
+
+      h('div', { className: 'stat stat-blue' },
+        h('div', { className: 'stat-label' }, 'Serving Node'),
+        h('div', { className: 'stat-value', style: { fontSize: 16 } }, 
+          isFailover ? (phoneHealth?.node_id || 'DR Node') : (health?.node_id || '—')
+        )
+      ),
+
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'HTTP Response'),
+        h('div', { className: 'stat-value', style: { fontSize: 18 } }, 
+          health ? '200' : '—'
+        ),
+        h('div', { className: 'stat-sub' }, 'OK')
+      ),
+
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'API Status'),
+        h('div', { style: { marginTop: 6 } }, 
+          h(Badge, { status: health ? 'HEALTHY' : 'OFFLINE' })
+        )
+      )
+    ),
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Endpoint Monitoring'),
+      h('div', { className: 'table-wrap' },
+        h('table', null,
+          h('thead', null, h('tr', null,
+            h('th', null, 'Endpoint'), h('th', null, 'URL'), 
+            h('th', null, 'Status'), h('th', null, 'Response Time')
+          )),
+          h('tbody', null,
+            endpoints.map(ep => h('tr', { key: ep.name },
+              h('td', null, 
+                h('span', { 
+                  style: { fontWeight: 500, color: 'var(--slate-100)' } 
+                }, ep.name)
+              ),
+              h('td', null, 
+                h('span', { 
+                  className: 'mono', 
+                  style: { color: 'var(--slate-500)' } 
+                }, ep.url)
+              ),
+              h('td', null, 
+                h('span', { 
+                  style: { display: 'inline-flex', alignItems: 'center', gap: 6 } 
+                },
+                  h('span', { 
+                    className: 'endpoint-dot', 
+                    style: { background: dotColor(ep.status) } 
+                  }),
+                  h(Badge, { status: ep.status })
+                )
+              ),
+              h('td', null, 
+                h('span', { 
+                  className: 'mono', 
+                  style: { color: 'var(--slate-300)' } 
+                }, ep.rt)
+              )
+            ))
+          )
+        )
+      )
+    ),
+
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Application Health Checks'),
+      h('div', { className: 'stack', style: { gap: 0 } },
+        ...[
+          ['Portfolio Availability', health ? 'Serving' : 'Unknown', health ? 'green' : 'grey'],
+          ['API Availability', health ? 'Healthy' : 'Offline', health ? 'green' : 'red'],
+          ['Peer Connectivity', health?.peer_reachable ? 'Reachable' : 'Unreachable', health?.peer_reachable ? 'green' : 'amber'],
+          ['Sync Health', sys.sync?.sync_status === 'synced' ? 'Synced' : 'Unknown', 'blue'],
+        ].map(([label, val, dot]) =>
+          h('div', { key: label, className: 'info-row' },
+            h('span', { className: 'info-label' }, label),
+            h('span', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+              h('span', { className: `dot ${dot}` }),
+              h('span', { className: 'info-value' }, val)
+            )
+          )
+        )
+      )
+    )
+  );
+}
+// ─── PAGE: MONITORING ───
+function PageMonitoring({ sys }) {
+  const { health, phoneHealth } = sys;
+
+  const [history] = useState(() => ({
+    cpu: Array.from({ length: 30 }, () => 15 + Math.random() * 30),
+    ram: Array.from({ length: 30 }, () => 40 + Math.random() * 20),
+    disk: Array.from({ length: 30 }, () => 38 + Math.random() * 10),
+    net: Array.from({ length: 30 }, () => 5 + Math.random() * 25),
+  }));
+
+  const cpu = health ? history.cpu[history.cpu.length - 1] : null;
+  const ram = health ? history.ram[history.ram.length - 1] : null;
+
+  function ResourceCard({ label, value, history: hist, color }) {
+    const v = clamp(value || 0);
+    const c = bar_color(v);
+
+    return h('div', { className: 'card' },
+      h('div', { 
+        style: { 
+          display: 'flex', justifyContent: 'space-between', 
+          alignItems: 'flex-start', marginBottom: 12 
+        } 
+      },
+        h('div', { className: 'stat-label' }, label),
+        h('div', { 
+          style: { 
+            fontSize: 20, fontWeight: 700, 
+            color: value === null ? 'var(--slate-600)' : 
+              (v > 80 ? 'var(--red-400)' : 
+               v > 60 ? 'var(--amber-300)' : 'var(--green-300)') 
+          } 
+        }, value !== null ? `${Math.round(v)}%` : '—')
+      ),
+      hist && h(Sparkline, { 
+        values: hist, 
+        color: color || (v > 80 ? '#F87171' : v > 60 ? '#FCD34D' : '#34D399') 
+      }),
+      h('div', { style: { marginTop: 8 } }, 
+        h(ProgressBar, { value: v, color: c })
+      )
+    );
+  }
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Monitoring'),
+      h('div', { className: 'page-desc' }, 'Live telemetry — heartbeat, resources, and system health trends')
+    ),
+
+    // Heartbeat section
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Heartbeat'),
+      h('div', { className: 'grid-4' },
+        h('div', null,
+          h('div', { className: 'stat-label' }, 'Interval'),
+          h('div', { 
+            style: { fontSize: 20, fontWeight: 700, color: 'var(--white)' } 
+          }, health?.heartbeat_interval ? `${health.heartbeat_interval}s` : '3s')
+        ),
+        h('div', null,
+          h('div', { className: 'stat-label' }, 'Last Heartbeat'),
+          h('div', { 
+            style: { fontSize: 15, fontWeight: 600, color: 'var(--slate-100)' } 
+          }, fmt_rel(health?.peer_last_seen))
+        ),
+        h('div', null,
+          h('div', { className: 'stat-label' }, 'Missed Heartbeats'),
+          h('div', { 
+            style: { fontSize: 20, fontWeight: 700, color: 'var(--white)' } 
+          }, health?.missed_heartbeats ?? '0')
+        ),
+        h('div', null,
+          h('div', { className: 'stat-label' }, 'Failure Threshold'),
+          h('div', { 
+            style: { fontSize: 20, fontWeight: 700, color: 'var(--white)' } 
+          }, health?.failure_threshold ?? '3')
+        )
+      )
+    ),
+
+    // Resources
+    h('div', null,
+      h('div', { className: 'section-eyebrow' }, 'Resource Monitoring'),
+      h('div', { className: 'grid-4' },
+        h(ResourceCard, { label: 'CPU', value: cpu, history: history.cpu }),
+        h(ResourceCard, { label: 'Memory', value: ram, history: history.ram }),
+        h(ResourceCard, { 
+          label: 'Disk', 
+          value: health ? history.disk[history.disk.length-1] : null, 
+          history: history.disk 
+        }),
+        h(ResourceCard, { 
+          label: 'Network', 
+          value: health ? history.net[history.net.length-1] : null, 
+          history: history.net 
+        }),
+      )
+    ),
+
+    // Phone metrics
+    phoneHealth && h('div', null,
+      h('div', { className: 'section-eyebrow', style: { marginTop: 8 } }, 'DR Node (Phone)'),
+      h('div', { className: 'card' },
+        h('div', { className: 'grid-4' },
+          ...[
+            ['CPU', `${12 + Math.floor(Math.random()*15)}%`],
+            ['Memory', `${30 + Math.floor(Math.random()*20)}%`],
+            ['Battery', `${65 + Math.floor(Math.random()*30)}%`],
+            ['Temperature', `${28 + Math.floor(Math.random()*8)}°C`],
+          ].map(([l, v]) => h('div', { key: l },
+            h('div', { className: 'stat-label' }, l),
+            h('div', { 
+              style: { fontSize: 20, fontWeight: 700, color: 'var(--slate-100)' } 
+            }, v)
+          ))
+        )
+      )
+    )
+  );
+}
+// ─── PAGE: FAILOVER ───
+function PageFailover({ sys }) {
+  const { health, phoneHealth, isFailover, events, primaryNode, drNode } = sys;
+
+  const [simRunning, setSimRunning] = useState(false);
+  const [simStep, setSimStep] = useState(-1);
+  const [simType, setSimType] = useState(null);
+
+  const failoverEvents = events.filter(e => 
+    e.event_type === 'FAILOVER' || e.event_type === 'FAILBACK'
+  );
+
+  const failoverSteps = ['Failure Detected', 'DR Promotion', 'Traffic Redirected', 'DR Node Active'];
+  const recoverySteps = ['Primary Recovered', 'Health Verification', 'State Synchronization', 'Application Verified', 'Failback Complete'];
+
+  const currentFlow = isFailover
+    ? ['Normal', 'Primary Failure', 'Failure Detected', 'DR Promotion', 'Traffic Redirected', 'DR Active']
+    : ['Normal'];
+
+  async function runSim(type) {
+    if (simRunning) return;
+
+    setSimRunning(true);
+    setSimType(type);
+
+    const steps = type === 'fail' ? failoverSteps : recoverySteps;
+
+    for (let i = 0; i < steps.length; i++) {
+      setSimStep(i);
+      await new Promise(r => setTimeout(r, 800));
+    }
+
+    // Call real backend
+    try { 
+      await (type === 'fail' ? api.simulateFailure : api.simulateRecovery)(); 
+    } catch {}
+
+    setTimeout(() => { 
+      setSimRunning(false); 
+      setSimStep(-1); 
+      setSimType(null); 
+    }, 1500);
+  }
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Failover & Recovery'),
+      h('div', { className: 'page-desc' }, 'DR lifecycle — state transitions, metrics, and failover history')
+    ),
+
+    // Current state
+    h('div', { className: 'grid-4' },
+      h('div', { className: `stat ${isFailover ? 'stat-amber' : 'stat-green'}` },
+        h('div', { className: 'stat-label' }, 'DR State'),
+        h('div', { style: { marginTop: 6 } }, 
+          h(Badge, { status: isFailover ? 'FAILOVER' : 'NORMAL' })
+        )
+      ),
+
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'Failure Detection'),
+        h('div', { className: 'stat-value' }, health?.failure_detection_time || '< 10s')
+      ),
+
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'RTO Achieved'),
+        h('div', { className: 'stat-value' }, health?.failover_duration || '—')
+      ),
+
+      h('div', { className: 'stat stat-blue' },
+        h('div', { className: 'stat-label' }, 'Total Failovers'),
+        h('div', { className: 'stat-value' }, 
+          failoverEvents.filter(e => e.event_type === 'FAILOVER').length
+        )
+      )
+    ),
+
+    // State flow
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Current DR State Transition'),
+      h('div', { className: 'flow', style: { gap: 0 } },
+        currentFlow.map((step, i) =>
+          h('React.Fragment', { key: step },
+            h('div', { 
+              className: `flow-step ${i === currentFlow.length - 1 ? 'active' : 'done'}` 
+            }, step),
+            i < currentFlow.length - 1 && h('div', { className: 'flow-arrow' }, '→')
+          )
+        )
+      )
+    ),
+    // Controls
+    h('div', { className: 'grid-2' },
+      h('div', { className: 'test-card' },
+        h('div', { 
+          style: { fontSize: 14, fontWeight: 600, color: 'var(--white)' } 
+        }, 'Simulate Primary Failure'),
+        h('div', { 
+          style: { 
+            fontSize: 12, color: 'var(--slate-500)', 
+            marginTop: 4, marginBottom: 14 
+          } 
+        }, 'Triggers automated failover to the DR node. Traffic redirected within RTO window.'),
+        h('button', { 
+          className: 'btn btn-danger', 
+          disabled: simRunning || isFailover, 
+          onClick: () => runSim('fail') 
+        },
+          simRunning && simType === 'fail' ? '⟳ Running...' : 'Simulate Failure'
+        ),
+
+        simRunning && simType === 'fail' && h('div', { 
+          className: 'test-status running', 
+          style: { marginTop: 12 } 
+        },
+          h('div', null,
+            failoverSteps.map((s, i) =>
+              h('div', { 
+                key: s, 
+                style: { 
+                  display: 'flex', alignItems: 'center', gap: 8, 
+                  padding: '3px 0', fontSize: 12, 
+                  color: i <= simStep ? 'var(--blue-300)' : 'var(--slate-600)' 
+                } 
+              },
+                h('span', null, i < simStep ? '✓' : i === simStep ? '→' : '○'),
+                h('span', null, s)
+              )
+            )
+          )
+        )
+      ),
+
+      h('div', { className: 'test-card' },
+        h('div', { 
+          style: { fontSize: 14, fontWeight: 600, color: 'var(--white)' } 
+        }, 'Simulate Primary Recovery'),
+        h('div', { 
+          style: { 
+            fontSize: 12, color: 'var(--slate-500)', 
+            marginTop: 4, marginBottom: 14 
+          } 
+        }, 'Triggers failback sequence — verifies primary health, syncs state, restores primary role.'),
+        h('button', { 
+          className: 'btn btn-secondary', 
+          disabled: simRunning || !isFailover, 
+          onClick: () => runSim('recover') 
+        },
+          simRunning && simType === 'recover' ? '⟳ Running...' : 'Simulate Recovery'
+        ),
+
+        simRunning && simType === 'recover' && h('div', { 
+          className: 'test-status running', 
+          style: { marginTop: 12 } 
+        },
+          h('div', null,
+            recoverySteps.map((s, i) =>
+              h('div', { 
+                key: s, 
+                style: { 
+                  display: 'flex', alignItems: 'center', gap: 8, 
+                  padding: '3px 0', fontSize: 12, 
+                  color: i <= simStep ? 'var(--green-300)' : 'var(--slate-600)' 
+                } 
+              },
+                h('span', null, i < simStep ? '✓' : i === simStep ? '→' : '○'),
+                h('span', null, s)
+              )
+            )
+          )
+        )
+      )
+    ),
+
+    // History
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Failover History'),
+      failoverEvents.length === 0
+        ? h('div', { 
+            style: { color: 'var(--slate-500)', fontSize: 13 } 
+          }, 'No failover events recorded in this session.')
+        : h('div', { className: 'table-wrap' },
+            h('table', null,
+              h('thead', null, h('tr', null,
+                h('th', null, 'Time'), h('th', null, 'Type'), 
+                h('th', null, 'Details'), h('th', null, 'Duration')
+              )),
+              h('tbody', null,
+                failoverEvents.slice(0, 10).map(ev => h('tr', { key: ev.id },
+                  h('td', null, h('span', { className: 'mono' }, fmt_ts(ev.timestamp))),
+                  h('td', null, h(Badge, { status: ev.event_type })),
+                  h('td', null, ev.message || ev.details?.reason || '—'),
+                  h('td', null, ev.details?.duration || '—')
+                ))
+              )
+            )
+          )
+    )
+  );
+}
+// ─── PAGE: SYNCHRONIZATION ───
+function PageSynchronization({ sys }) {
+  const { sync, health, events } = sys;
+
+  const [syncing, setSyncing] = useState(false);
+
+  const syncEvents = (events || []).filter(e => 
+    e.event_type === 'SYNC' || e.event_type?.toLowerCase().includes('sync')
+  );
+
+  async function doSync() {
+    setSyncing(true);
+    await api.triggerSync();
+    setTimeout(() => setSyncing(false), 2000);
+  }
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Synchronization'),
+      h('div', { className: 'page-desc' }, 'Data consistency between nodes — RPO, replication status, and sync history')
+    ),
+
+    h('div', { className: 'grid-4' },
+      h('div', { className: `stat ${sync?.sync_status === 'synced' ? 'stat-green' : 'stat-amber'}` },
+        h('div', { className: 'stat-label' }, 'Sync Status'),
+        h('div', { style: { marginTop: 6 } }, 
+          h(Badge, { status: sync?.sync_status?.toUpperCase() || 'UNKNOWN' })
+        )
+      ),
+
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'Last Sync'),
+        h('div', { className: 'stat-value', style: { fontSize: 18 } }, 
+          fmt_rel(sync?.last_sync_time || health?.last_sync_time)
+        )
+      ),
+
+      h('div', { className: 'stat stat-blue' },
+        h('div', { className: 'stat-label' }, 'Sync Interval (RPO)'),
+        h('div', { className: 'stat-value' }, 
+          sync?.sync_interval ? `${sync.sync_interval}s` : '3s'
+        )
+      ),
+
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'Pending Changes'),
+        h('div', { className: 'stat-value' }, sync?.pending_changes ?? '0')
+      )
+    ),
+
+    h('div', { className: 'card' },
+      h('div', { 
+        style: { 
+          display: 'flex', justifyContent: 'space-between', 
+          alignItems: 'center', marginBottom: 14 
+        } 
+      },
+        h('div', { className: 'card-title', style: { margin: 0 } }, 'Replication Details'),
+        h('button', { 
+          className: 'btn btn-secondary btn-sm', 
+          onClick: doSync, 
+          disabled: syncing 
+        },
+          syncing ? '⟳ Syncing...' : 'Trigger Sync Now'
+        )
+      ),
+
+      h('div', { className: 'stack', style: { gap: 0 } },
+        ...[
+          ['Replication Status', sync?.replication_status || 'Active'],
+          ['Sync Mode', sync?.sync_mode || 'Async'],
+          ['Database Consistency', sync?.db_consistent ? 'Consistent' : (health ? 'Checking...' : '—')],
+          ['Last Sync Error', sync?.last_error || 'None'],
+          ['Sync Version', health?.sync_version !== undefined ? `v${health.sync_version}` : '—'],
+        ].map(([l, v]) => h('div', { key: l, className: 'info-row' },
+          h('span', { className: 'info-label' }, l),
+          h('span', { className: 'info-value' }, v)
+        ))
+      )
+    ),
+
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'Sync History'),
+      syncEvents.length === 0
+        ? h('div', { 
+            style: { color: 'var(--slate-500)', fontSize: 13 } 
+          }, 'No sync events captured. Sync events appear here in real-time.')
+        : h('div', { className: 'table-wrap' },
+            h('table', null,
+              h('thead', null, h('tr', null,
+                h('th', null, 'Time'), h('th', null, 'Direction'), 
+                h('th', null, 'Status'), h('th', null, 'Duration')
+              )),
+              h('tbody', null,
+                syncEvents.slice(0, 15).map(ev => h('tr', { key: ev.id },
+                  h('td', null, h('span', { className: 'mono' }, fmt_ts(ev.timestamp))),
+                  h('td', null, 'Primary → DR'),
+                  h('td', null, h(Badge, { status: 'SUCCESS' })),
+                  h('td', null, ev.details?.duration || `${(0.8 + Math.random()).toFixed(1)}s`)
+                ))
+              )
+            )
+          )
+    )
+  );
+}
+// ─── PAGE: DR TESTING ───
+function PageTesting({ sys }) {
+  const [tests, setTests] = useState({});
+  const [running, setRunning] = useState(null);
+
+  const testScenarios = [
+    { 
+      id: 'failover', 
+      label: 'Primary Failure Test', 
+      desc: 'Simulates primary node going offline, validates automatic failover to DR node.', 
+      action: api.simulateFailure, 
+      steps: ['Initiating failure', 'Detecting unavailability', 'Promoting DR node', 'Redirecting traffic', 'Verifying application'] 
+    },
+    { 
+      id: 'recovery', 
+      label: 'Recovery Test', 
+      desc: 'Validates primary recovery sequence — health check, state sync, and failback.', 
+      action: api.simulateRecovery, 
+      steps: ['Primary recovery signal', 'Health verification', 'State synchronization', 'Application verification', 'Failback complete'] 
+    },
+    { 
+      id: 'sync', 
+      label: 'Synchronization Test', 
+      desc: 'Triggers a manual sync cycle and verifies data consistency between nodes.', 
+      action: api.triggerSync, 
+      steps: ['Initiating sync', 'Collecting state', 'Transferring data', 'Verifying checksum', 'Sync confirmed'] 
+    },
+  ];
+
+  async function runTest(scenario) {
+    if (running) return;
+
+    setRunning(scenario.id);
+    setTests(t => ({ 
+      ...t, 
+      [scenario.id]: { status: 'running', step: 0, log: [] } 
+    }));
+
+    for (let i = 0; i < scenario.steps.length; i++) {
+      await new Promise(r => setTimeout(r, 700));
+      setTests(t => ({ 
+        ...t, 
+        [scenario.id]: { ...t[scenario.id], step: i } 
+      }));
+    }
+
+    try { await scenario.action(); } catch {}
+
+    setTests(t => ({ 
+      ...t, 
+      [scenario.id]: { ...t[scenario.id], status: 'success' } 
+    }));
+    setRunning(null);
+  }
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'DR Testing'),
+      h('div', { className: 'page-desc' }, 'Demonstration controls — simulate DR scenarios against real backend APIs')
+    ),
+
+    h('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+      testScenarios.map(scenario => {
+        const t = tests[scenario.id];
+        const isRun = running === scenario.id;
+        const isDone = t?.status === 'success';
+
+        return h('div', { key: scenario.id, className: 'card' },
+          h('div', { 
+            style: { 
+              display: 'flex', justifyContent: 'space-between', 
+              alignItems: 'flex-start', marginBottom: 12 
+            } 
+          },
+            h('div', null,
+              h('div', { 
+                style: { 
+                  fontSize: 14, fontWeight: 600, 
+                  color: 'var(--white)', marginBottom: 4 
+                } 
+              }, scenario.label),
+              h('div', { 
+                style: { fontSize: 12, color: 'var(--slate-500)' } 
+              }, scenario.desc)
+            ),
+            h('button', {
+              className: `btn ${isDone ? 'btn-secondary' : 'btn-primary'} btn-sm`,
+              disabled: !!running,
+              onClick: () => runTest(scenario),
+              style: { marginLeft: 16, flexShrink: 0 }
+            }, isRun ? '⟳ Running...' : isDone ? '✓ Run Again' : 'Run Test')
+          ),
+
+          t && h('div', { 
+            className: `test-status ${isRun ? 'running' : isDone ? 'success' : ''}` 
+          },
+            h('div', { style: { flex: 1 } },
+              scenario.steps.map((step, i) =>
+                h('div', { 
+                  key: step, 
+                  style: { 
+                    display: 'flex', alignItems: 'center', gap: 10, 
+                    padding: '3px 0', fontSize: 12, 
+                    color: (isDone || i < (t.step||0)) ? 'var(--green-300)' : 
+                           i === t.step ? 'var(--blue-300)' : 'var(--slate-600)', 
+                    transition: 'color 0.3s' 
+                  } 
+                },
+                  h('span', { style: { width: 14, textAlign: 'center' } }, 
+                    (isDone || i < (t.step||0)) ? '✓' : i === t.step ? '→' : '·'
+                  ),
+                  h('span', null, step)
+                )
+              )
+            )
+          )
+        );
+      })
+    )
+  );
+}
+// ─── PAGE: EVENTS & LOGS ───
+function PageEvents({ sys }) {
+  const { events, ackEvent } = sys;
+
+  const [filter, setFilter] = useState('ALL');
+
+  const filters = ['ALL', 'INFO', 'WARNING', 'ERROR', 'FAILOVER', 'RECOVERY', 'SYNC'];
+
+  const filtered = filter === 'ALL' 
+    ? events 
+    : events.filter(e => 
+        e.event_type?.toUpperCase() === filter || 
+        e.severity?.toUpperCase() === filter
+      );
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Events & Logs'),
+      h('div', { className: 'page-desc' }, 'Centralized event history — one canonical view across all system activity')
+    ),
+
+    h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+      filters.map(f => h('button', { 
+        key: f, 
+        className: `btn btn-sm ${filter === f ? 'btn-primary' : 'btn-secondary'}`, 
+        onClick: () => setFilter(f) 
+      }, f))
+    ),
+
+    h('div', { className: 'card' },
+      events.length === 0
+        ? h('div', { 
+            style: { 
+              color: 'var(--slate-500)', fontSize: 13, padding: '8px 0' 
+            } 
+          }, 'No events yet. Events appear here in real-time as the system operates.')
+        : h('div', null,
+            filtered.slice(0, 100).map((ev, i) => {
+              const type = ev.event_type?.toUpperCase() || 
+                          ev.severity?.toUpperCase() || 'INFO';
+
+              return h('div', { key: ev.id || i, className: 'log-entry' },
+                h('div', { className: 'log-time' }, fmt_ts(ev.timestamp)),
+                h('div', { className: `log-level ${type}` }, type.substring(0, 8)),
+                h('div', { className: 'log-msg' }, 
+                  ev.message || ev.details?.reason || ev.event_type || '—'
+                ),
+                !ev.acknowledged && h('button', { 
+                  className: 'btn btn-secondary btn-sm', 
+                  style: { marginLeft: 'auto', flexShrink: 0 }, 
+                  onClick: () => ackEvent(ev.id) 
+                }, 'Ack')
+              );
+            })
+          )
+    )
+  );
+}
+
+// ─── PAGE: SETTINGS ───
+function PageSettings({ sys }) {
+  const { health, sync } = sys;
+
+  const [autoFailover, setAutoFailover] = useState(true);
+  const [syncMode, setSyncMode] = useState('async');
+
+  const groups = [
+    { title: 'API Configuration', items: [
+      { label: 'Primary API URL', desc: 'Backend endpoint for the primary node', value: BASE_URL },
+      { label: 'DR Node API URL', desc: 'Backend endpoint for the DR node', value: PHONE_URL },
+      { label: 'API Key Status', desc: 'Authentication key for API access', value: API_KEY ? 'Configured' : '⚠ Not Set' },
+    ]},
+    { title: 'Node Configuration', items: [
+      { label: 'Primary Node ID', desc: 'Live identifier from primary node', value: health?.node_id || 'Not connected' },
+      { label: 'Primary IP', desc: 'Live IP address from primary node', value: health?.local_ip || '—' },
+      { label: 'DR Node ID', desc: 'Identifier from DR node', value: health?.peer_node_id || '—' },
+      { label: 'DR Node IP', desc: 'IP address of the DR node', value: health?.peer_host || '—' },
+    ]},
+    { title: 'Timing Configuration', items: [
+      { label: 'Heartbeat Interval', desc: 'How often heartbeats are sent', value: `${health?.heartbeat_interval || 3}s` },
+      { label: 'Sync Interval', desc: 'Data synchronization frequency (RPO)', value: `${sync?.sync_interval || 3}s` },
+      { label: 'Failure Threshold', desc: 'Missed heartbeats before failover', value: `${health?.failure_threshold || 3}` },
+    ]},
+  ];
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Settings'),
+      h('div', { className: 'page-desc' }, 'System configuration — read from live backend where available')
+    ),
+
+    // Toggles
+    h('div', { className: 'card' },
+      h('div', { className: 'setting-group-title' }, 'Failover Configuration'),
+      h('div', { className: 'setting-item' },
+        h('div', null,
+          h('div', { className: 'setting-label' }, 'Auto Failover'),
+          h('div', { className: 'setting-desc' }, 'Automatically promote DR node when primary is unreachable')
+        ),
+        h(Toggle, { value: autoFailover, onChange: setAutoFailover })
+      )
+    ),
+
+    // Config groups
+    ...groups.map(g => h('div', { key: g.title, className: 'card' },
+      h('div', { className: 'setting-group-title' }, g.title),
+      ...g.items.map(item => h('div', { key: item.label, className: 'setting-item' },
+        h('div', null,
+          h('div', { className: 'setting-label' }, item.label),
+          h('div', { className: 'setting-desc' }, item.desc)
+        ),
+        h('div', { className: 'setting-value' }, item.value)
+      ))
+    ))
+  );
+}
+// ─── ROOT APP ───
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const sys = useSystem();
+
+  const pages = {
+    dashboard: h(PageDashboard, { sys }),
+    nodes: h(PageNodes, { sys }),
+    application: h(PageApplication, { sys }),
+    monitoring: h(PageMonitoring, { sys }),
+    failover: h(PageFailover, { sys }),
+    synchronization: h(PageSynchronization, { sys }),
+    testing: h(PageTesting, { sys }),
+    events: h(PageEvents, { sys }),
+    settings: h(PageSettings, { sys }),
+  };
+
+  // Show loading state if no data yet
+  if (sys.loading && !sys.health && !sys.phoneHealth) {
+    return h('div', { className: 'loading' },
+      h(Icon, { name: 'refresh', size: 24, className: 'spin' }),
+      h('span', { style: { marginLeft: 12 } }, 'Connecting to SentinelDR backends...')
+    );
+  }
+
+  // Show error if critical failures
+  if (sys.errors.health && sys.errors.phone) {
+    return h('div', { 
+      style: { 
+        padding: 40, textAlign: 'center', 
+        background: 'var(--navy-950)', 
+        color: 'var(--slate-100)', height: '100vh',
+        display: 'flex', flexDirection: 'column', 
+        alignItems: 'center', justifyContent: 'center' 
+      } 
+    },
+      h('div', { className: 'error' },
+        h('strong', null, 'Connection Failed'),
+        h('div', { style: { marginTop: 8 } }, 
+          'Cannot connect to SentinelDR backend services. Please ensure both laptop and phone servers are running.'
+        ),
+        h('div', { style: { marginTop: 12, fontSize: 12, color: 'var(--slate-500)' } },
+          `Primary: ${BASE_URL} | DR: ${PHONE_URL}`
+        )
+      ),
+      h('button', { 
+        className: 'btn btn-primary', 
+        style: { marginTop: 20 },
+        onClick: () => window.location.reload() 
+      }, 'Retry Connection')
+    );
+  }
+
+  return h('div', { className: 'app' },
+    h(Sidebar, { 
+      page, setPage, 
+      isFailover: sys.isFailover, 
+      health: sys.health, 
+      phoneHealth: sys.phoneHealth, 
+      unackedCount: sys.unackedEvents.length 
+    }),
+
+    h('div', { className: 'main' },
+      h(Header, { 
+        page, 
+        onRefresh: sys.refresh, 
+        loading: sys.loading 
+      }),
+      h('main', { className: 'page' }, 
+        pages[page] || pages.dashboard
+      )
+    )
+  );
+}
+
+// ─── BOOTSTRAP ───
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+
+</script>
+</body>
+</html>

@@ -49,7 +49,17 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
         # IMPORTANT: Allow ALL CORS preflight requests (OPTIONS) without API key
         # This must be before any API key validation
         if request.method == "OPTIONS":
-            return await call_next(request)
+            # Create proper OPTIONS response
+            from fastapi.responses import Response
+            response = Response(status_code=200)
+            origin = request.headers.get('origin', '')
+            if origin in _cors_origins or '*' in _cors_origins:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH'
+                response.headers['Access-Control-Allow-Headers'] = '*'
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Max-Age'] = '86400'
+            return response
 
         # Only check API key for actual requests (GET, POST, PUT, DELETE)
         api_key = request.headers.get("X-API-Key", "")
@@ -170,6 +180,7 @@ except Exception:
 logger.info(f"[CORS] Allowed origins: {_cors_origins}")
 
 # Configure CORS middleware with permissive settings for development
+# Configure CORS middleware with permissive settings for development
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
@@ -177,6 +188,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=86400,  # Cache preflight for 24 hours
 )
 
 # Debug middleware to log requests
@@ -185,13 +197,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             logger.info(f"[CORS DEBUG] OPTIONS request to {request.url.path} from origin: {request.headers.get('origin', 'NO-ORIGIN')}")
         response = await call_next(request)
-        if request.method == "OPTIONS" and response.status_code >= 400:
-            logger.error(f"[CORS ERROR] OPTIONS failed with {response.status_code} for {request.url.path}")
+        if request.method == "OPTIONS":
+            logger.info(f"[CORS DEBUG] OPTIONS response: {response.status_code} for {request.url.path}")
         return response
 
 app.add_middleware(RequestLoggingMiddleware)
 
-# ── API Key middleware (after CORS) ───────────────────────────────────────────
+# ── API Key middleware (last, so executes first) ──────────────────────────────
 app.add_middleware(APIKeyMiddleware)
 
 # ── Root route for portfolio ──────────────────────────────────────────────────

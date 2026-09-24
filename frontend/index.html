@@ -1,16 +1,717 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SentinelDR - Disaster Recovery Platform</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>SentinelDR — Disaster Recovery Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<style>
+/* ─── DESIGN TOKENS ─── */
+:root {
+  --navy-950: #060C18;
+  --navy-900: #0B1628;
+  --navy-800: #111F38;
+  --navy-700: #162948;
+  --navy-600: #1E3555;
+  --blue-500: #2563EB;
+  --blue-400: #3B82F6;
+  --blue-300: #60A5FA;
+  --blue-200: #93C5FD;
+  --white: #FFFFFF;
+  --slate-100: #F0F4F8;
+  --slate-200: #D9E2EC;
+  --slate-400: #829AB1;
+  --slate-500: #627D98;
+  --slate-600: #486581;
+  --green-400: #10B981;
+  --green-300: #34D399;
+  --amber-400: #F59E0B;
+  --amber-300: #FCD34D;
+  --red-500: #EF4444;
+  --red-400: #F87171;
+  --border: rgba(255,255,255,0.07);
+  --border-active: rgba(59,130,246,0.35);
+  --surface: rgba(255,255,255,0.04);
+  --surface-raised: rgba(255,255,255,0.07);
+  --glow-blue: rgba(59,130,246,0.15);
+  --sidebar-w: 224px;
+  --header-h: 56px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font: 'Inter', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ─── RESET & BASE ─── */
+*,* ::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--navy-950);
+  color: var(--slate-100);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--navy-600); border-radius: 3px; }
+
+/* ─── LAYOUT ─── */
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+/* Sidebar */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--navy-900);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 10;
+}
+.sidebar-brand {
+  padding: 0 20px;
+  height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.brand-icon {
+  width: 28px; height: 28px;
+  background: var(--blue-500);
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.brand-icon svg { width: 16px; height: 16px; fill: white; }
+.brand-name { font-size: 15px; font-weight: 700; color: var(--white); letter-spacing: -0.3px; }
+.brand-sub { font-size: 10px; color: var(--slate-500); letter-spacing: 0.5px; margin-top: 1px; }
+.sidebar-nav { flex: 1; padding: 12px 10px; overflow-y: auto; }
+.nav-section { margin-bottom: 18px; }
+
+.nav-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--slate-600);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 0 10px;
+  margin-bottom: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  color: var(--slate-400);
+  font-size: 13.5px;
+  font-weight: 450;
+  user-select: none;
+  position: relative;
+}
+
+.nav-item:hover { background: var(--surface-raised); color: var(--slate-100); }
+.nav-item.active { background: rgba(37,99,235,0.18); color: var(--blue-300); }
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 2px;
+  background: var(--blue-400);
+  border-radius: 2px;
+}
+
+.nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.8; }
+.nav-item.active .nav-icon { opacity: 1; }
+.nav-badge {
+  margin-left: auto;
+  background: var(--red-500);
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 5px;
+}
+
+.sidebar-status {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.status-row:last-child { margin-bottom: 0; }
+
+.dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+
+.dot.green { background: var(--green-400); box-shadow: 0 0 6px var(--green-400); }
+.dot.amber { background: var(--amber-400); box-shadow: 0 0 6px var(--amber-400); }
+.dot.red { background: var(--red-500); box-shadow: 0 0 6px var(--red-500); }
+.dot.grey { background: var(--slate-600); }
+
+.status-text { font-size: 12px; color: var(--slate-400); }
+.status-text strong { color: var(--slate-200); font-weight: 500; }
+
+/* Main area */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Header */
+.header {
+  height: var(--header-h);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+  flex-shrink: 0;
+  background: var(--navy-900);
+}
+
+.header-title { font-size: 15px; font-weight: 600; color: var(--white); }
+.header-path { font-size: 12px; color: var(--slate-500); }
+.header-spacer { flex: 1; }
+.header-pill {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--slate-400);
+}
+
+.header-pill .dot { width: 6px; height: 6px; }
+.header-time { font-size: 12px; color: var(--slate-500); font-variant-numeric: tabular-nums; }
+
+.refresh-btn {
+  width: 30px; height: 30px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  color: var(--slate-400);
+  transition: background 0.12s, color 0.12s;
+}
+
+.refresh-btn:hover { background: var(--surface-raised); color: var(--slate-100); }
+
+/* Page content */
+.page { flex: 1; overflow-y: auto; padding: 24px; }
+
+/* ─── SHARED COMPONENTS ─── */
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--white); letter-spacing: -0.4px; }
+.page-desc { font-size: 13px; color: var(--slate-500); margin-top: 4px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
+.row { display: flex; gap: 16px; }
+
+/* Card */
+.card {
+  background: var(--navy-800);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.card-sm { padding: 14px 16px; }
+
+.card-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--slate-500);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.card-big-value { font-size: 28px; font-weight: 700; color: var(--white); letter-spacing: -0.5px; }
+.card-big-unit { font-size: 14px; color: var(--slate-500); margin-left: 4px; }
+.card-sub { font-size: 12px; color: var(--slate-500); margin-top: 4px; }
+
+/* Metric stat */
+.stat { padding: 16px 20px; background: var(--navy-800); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.stat-label { font-size: 11px; color: var(--slate-500); font-weight: 500; letter-spacing: 0.3px; margin-bottom: 6px; }
+.stat-value { font-size: 24px; font-weight: 700; color: var(--white); letter-spacing: -0.4px; line-height: 1; }
+.stat-sub { font-size: 11px; color: var(--slate-500); margin-top: 5px; }
+.stat-green .stat-value { color: var(--green-300); }
+.stat-amber .stat-value { color: var(--amber-300); }
+.stat-red .stat-value { color: var(--red-400); }
+.stat-blue .stat-value { color: var(--blue-300); }
+
+/* Status badge */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.badge-green { background: rgba(16,185,129,0.15); color: var(--green-300); border: 1px solid rgba(16,185,129,0.25); }
+.badge-amber { background: rgba(245,158,11,0.15); color: var(--amber-300); border: 1px solid rgba(245,158,11,0.25); }
+.badge-red { background: rgba(239,68,68,0.15); color: var(--red-400); border: 1px solid rgba(239,68,68,0.25); }
+.badge-blue { background: rgba(59,130,246,0.15); color: var(--blue-300); border: 1px solid rgba(59,130,246,0.25); }
+.badge-grey { background: rgba(130,154,177,0.12); color: var(--slate-400); border: 1px solid rgba(130,154,177,0.2); }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 500;
+  cursor: pointer; border: none; transition: all 0.12s;
+  white-space: nowrap; user-select: none;
+}
+
+.btn-primary { background: var(--blue-500); color: white; }
+.btn-primary:hover { background: var(--blue-400); }
+.btn-secondary { background: var(--surface-raised); color: var(--slate-200); border: 1px solid var(--border); }
+.btn-secondary:hover { background: rgba(255,255,255,0.1); color: white; }
+.btn-sm { padding: 5px 11px; font-size: 12px; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Info row */
+.info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.info-row:last-child { border-bottom: none; }
+.info-label { font-size: 12px; color: var(--slate-500); }
+.info-value { font-size: 13px; color: var(--slate-100); font-weight: 450; text-align: right; }
+.info-value.mono { font-family: var(--mono); font-size: 12px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.fade-in { animation: fadeIn 0.2s ease; }
+
+/* Section labels */
+.section-eyebrow { font-size: 10px; font-weight: 600; color: var(--blue-400); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const { useState, useEffect, useRef, useCallback } = React;
+const h = React.createElement;
+
+// ─── CONSTANTS ─── FIXED FOR YOUR BACKEND
+const BASE_URL = 'http://localhost:8000';
+const PHONE_URL = 'http://localhost:8001';  
+const API_KEY = 'sentineldr-key';
+
+// ─── API LAYER ─── CONNECTED TO YOUR REAL BACKEND
+async function apiFetch(url, opts = {}) {
+  try {
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': API_KEY, ...opts.headers },
+      ...opts
+    });
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') || '';
+    return ct.includes('application/json') ? res.json() : null;
+  } catch { return null; }
+}
+
+const api = {
+  health: () => apiFetch(`${BASE_URL}/health`),
+  phoneHealth: () => apiFetch(`${PHONE_URL}/health`),
+  nodes: () => apiFetch(`${BASE_URL}/nodes`),
+  events: (n=50) => apiFetch(`${BASE_URL}/events?limit=${n}`),
+  sync: () => apiFetch(`${BASE_URL}/sync/status`),
+  triggerSync: () => apiFetch(`${BASE_URL}/sync/now`, { method: 'POST' }),
+  ackEvent: (id) => apiFetch(`${BASE_URL}/events/${id}/acknowledge`, { method: 'POST' }),
+};
+
+// ─── HOOKS ───
+function usePolling(fetcher, interval = 3000) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const ref = useRef(null);
+
+  const fetch_ = useCallback(async () => {
+    const d = await fetcher();
+    if (d !== undefined) setData(d);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetch_();
+    ref.current = setInterval(fetch_, interval);
+    return () => clearInterval(ref.current);
+  }, []);
+
+  return { data, loading, refresh: fetch_ };
+}
+
+function useSystem() {
+  const { data: health, loading: hl, refresh: rh } = usePolling(api.health, 3000);
+  const { data: phoneHealth, refresh: rph } = usePolling(api.phoneHealth, 3000);
+  const { data: nodes } = usePolling(api.nodes, 5000);
+  const { data: events, refresh: re } = usePolling(() => api.events(100), 3000);
+  const { data: sync } = usePolling(api.sync, 5000);
+
+  const refresh = () => { rh(); rph(); re(); };
+
+  const isFailover = !!(health?.failover_active || phoneHealth?.failover_active);
+  const primaryNode = (nodes || []).find(n => n.role === 'primary' || n.role === 'laptop');
+  const drNode = (nodes || []).find(n => n.role === 'secondary' || n.role === 'phone' || n.role === 'active_secondary');
+  const unackedEvents = (events || []).filter(e => !e.acknowledged);
+
+  return { health, phoneHealth, nodes: nodes || [], events: events || [], sync, isFailover, primaryNode, drNode, loading: hl, refresh, unackedEvents, ackEvent: api.ackEvent };
+}
+// ─── FORMAT HELPERS ───
+function fmt_uptime(s) {
+  if (!s) return '—';
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = Math.floor(s%60);
+  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+function fmt_rel(ts) {
+  if (!ts) return '—';
+  const d = Math.floor((Date.now() - new Date(ts))/1000);
+  if (d < 60) return `${d}s ago`;
+  if (d < 3600) return `${Math.floor(d/60)}m ago`;
+  return `${Math.floor(d/3600)}h ago`;
+}
+
+function fmt_ts(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function clamp(v, lo=0, hi=100) { return Math.max(lo, Math.min(hi, v||0)); }
+function bar_color(v) { return v > 80 ? 'red' : v > 60 ? 'amber' : 'green'; }
+
+// ─── ICONS (inline SVG) ───
+function Icon({ name, size=16 }) {
+  const paths = {
+    dashboard: 'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
+    nodes: 'M4 6h16v2H4zm0 5h16v2H4zm0 5h16v2H4z',
+    application: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z',
+    monitoring: 'M3.5 18.5l6-6 4 4L22 6.92M2 2h20v20H2z',
+    failover: 'M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z',
+    sync: 'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z',
+    events: 'M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z',
+    testing: 'M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z',
+    settings: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.57 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z',
+    refresh: 'M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z',
+    check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+    warn: 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z',
+  };
+
+  return h('svg', { width: size, height: size, viewBox: '0 0 24 24', fill: 'currentColor', style: { flexShrink: 0 } },
+    h('path', { d: paths[name] || paths.dashboard })
+  );
+}
+
+// ─── COMPONENTS ───
+function Badge({ status }) {
+  const map = { ONLINE: 'green', HEALTHY: 'green', ACTIVE: 'green', OPERATIONAL: 'green', SUCCESS: 'green', STANDBY: 'grey', READY: 'grey', OFFLINE: 'red', FAILED: 'red', CRITICAL: 'red', WARNING: 'amber', SYNCING: 'blue', FAILOVER: 'amber' };
+  const cls = map[status?.toUpperCase()] || 'grey';
+  return h('span', { className: `badge badge-${cls}` }, status);
+}
+// ─── SIDEBAR ───
+const NAV = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
+  { section: 'System' },
+  { id: 'nodes', label: 'Nodes', icon: 'nodes' },
+  { id: 'application', label: 'Application', icon: 'application' },
+  { id: 'monitoring', label: 'Monitoring', icon: 'monitoring' },
+  { section: 'Disaster Recovery' },
+  { id: 'failover', label: 'Failover & Recovery', icon: 'failover' },
+  { id: 'synchronization', label: 'Synchronization', icon: 'sync' },
+  { id: 'testing', label: 'DR Testing', icon: 'testing' },
+  { section: 'Operations' },
+  { id: 'events', label: 'Events & Logs', icon: 'events' },
+  { id: 'settings', label: 'Settings', icon: 'settings' },
+];
+
+function Sidebar({ page, setPage, isFailover, health, phoneHealth, unackedCount }) {
+  const primaryOk = !!health;
+  const drOk = !!phoneHealth;
+
+  return h('aside', { className: 'sidebar' },
+    h('div', { className: 'sidebar-brand' },
+      h('div', { className: 'brand-icon' },
+        h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'white' },
+          h('path', { d: 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z' })
+        )
+      ),
+      h('div', null,
+        h('div', { className: 'brand-name' }, 'SentinelDR'),
+        h('div', { className: 'brand-sub' }, 'DR Console')
+      )
+    ),
+
+    h('nav', { className: 'sidebar-nav' },
+      NAV.map((item, i) => {
+        if (item.section) return h('div', { key: i, className: 'nav-section' },
+          i > 0 && h('div', { style: { height: 4 } }),
+          h('div', { className: 'nav-section-label' }, item.section)
+        );
+
+        const isActive = page === item.id;
+        const badge = item.id === 'events' && unackedCount > 0 ? unackedCount : null;
+
+        return h('div', { key: item.id, className: `nav-item ${isActive ? 'active' : ''}`, onClick: () => setPage(item.id) },
+          h(Icon, { name: item.icon }),
+          h('span', null, item.label),
+          badge && h('span', { className: 'nav-badge' }, badge > 99 ? '99+' : badge)
+        );
+      })
+    ),
+
+    h('div', { className: 'sidebar-status' },
+      h('div', { className: 'status-row' },
+        h('div', { className: `dot ${primaryOk ? 'green' : 'red'} ${primaryOk ? 'pulse' : ''}` }),
+        h('div', { className: 'status-text' }, h('strong', null, 'Primary'), ` ${primaryOk ? 'Online' : 'Offline'}`)
+      ),
+      h('div', { className: 'status-row' },
+        h('div', { className: `dot ${drOk ? 'green' : 'grey'}` }),
+        h('div', { className: 'status-text' }, h('strong', null, 'DR Node'), ` ${drOk ? 'Standby' : 'Offline'}`)
+      ),
+      isFailover && h('div', { style: { marginTop: 8, padding: '6px 10px', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 6, fontSize: 11, color: 'var(--amber-300)', fontWeight: 600 } }, '⚠ DR Mode Active')
+    )
+  );
+}
+
+// ─── HEADER ───
+function Header({ page, onRefresh, loading }) {
+  const [time, setTime] = useState(new Date());
+  useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
+
+  const titles = { dashboard: 'Dashboard', nodes: 'Nodes', application: 'Application', monitoring: 'Monitoring', failover: 'Failover & Recovery', synchronization: 'Synchronization', testing: 'DR Testing', events: 'Events & Logs', settings: 'Settings' };
+
+  return h('header', { className: 'header' },
+    h('div', { className: 'header-title' }, titles[page] || 'SentinelDR'),
+    h('div', { className: 'header-spacer' }),
+    h('div', { className: 'header-time' }, time.toLocaleTimeString('en-US', { hour12: false })),
+    h('button', { className: 'refresh-btn', onClick: onRefresh, title: 'Refresh' },
+      h('div', { style: { display: 'flex' }, className: loading ? 'spin' : '' },
+        h(Icon, { name: 'refresh', size: 14 })
+      )
+    )
+  );
+}
+// ─── PAGE: DASHBOARD ───
+function PageDashboard({ sys }) {
+  const { health, phoneHealth, isFailover, primaryNode, drNode, events, sync } = sys;
+
+  const systemStatus = isFailover ? { label: 'FAILOVER ACTIVE', cls: 'badge-amber' }
+    : (health && phoneHealth) ? { label: 'OPERATIONAL', cls: 'badge-green' }
+    : health ? { label: 'PRIMARY ONLY', cls: 'badge-amber' }
+    : { label: 'DEGRADED', cls: 'badge-red' };
+
+  const activeNode = isFailover ? (drNode?.node_id || 'DR Node') : (health?.node_id || primaryNode?.node_id || 'Primary');
+  const mode = isFailover ? 'FAILOVER' : 'NORMAL';
+  const criticals = events.filter(e => !e.acknowledged && (e.severity?.toLowerCase() === 'critical' || e.event_type === 'FAILOVER'));
+
+  return h('div', { className: 'fade-in stack' },
+    // Top row: status cards
+    h('div', { className: 'grid-4' },
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'System Status'),
+        h('div', { style: { marginTop: 6 } }, h(Badge, { status: systemStatus.label })),
+        h('div', { className: 'stat-sub' }, isFailover ? 'DR node serving traffic' : 'All systems nominal')
+      ),
+      h('div', { className: 'stat' },
+        h('div', { className: 'stat-label' }, 'Active Node'),
+        h('div', { className: 'stat-value', style: { fontSize: 18, fontFamily: 'var(--mono)' } }, activeNode.substring(0, 12) || '—'),
+        h('div', { className: 'stat-sub' }, mode)
+      ),
+      h('div', { className: 'stat stat-blue' },
+        h('div', { className: 'stat-label' }, 'RTO Target'),
+        h('div', { className: 'stat-value' }, '< 30', h('span', { style: { fontSize: 13, color: 'var(--slate-500)' } }, 's')),
+        h('div', { className: 'stat-sub' }, health?.failover_duration ? `Last: ${health.failover_duration}` : 'No recent failover')
+      ),
+      h('div', { className: 'stat stat-green' },
+        h('div', { className: 'stat-label' }, 'Last Sync'),
+        h('div', { className: 'stat-value', style: { fontSize: 18 } }, fmt_rel(sync?.last_sync_time || health?.last_sync_time)),
+        h('div', { className: 'stat-sub' }, sync?.sync_status === 'synced' ? 'In sync' : sync?.sync_status || 'Unknown')
+      )
+    ),
+
+    // System topology
+    h('div', { className: 'card' },
+      h('div', { className: 'card-title' }, 'System Topology'),
+      h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40, padding: '24px 0' } },
+        // Smart Proxy
+        h('div', { style: { textAlign: 'center', padding: '10px 16px', background: 'var(--navy-700)', border: '1px solid var(--blue-500)', borderRadius: 'var(--radius)', minWidth: 100 } },
+          h('div', { style: { fontSize: 10, fontWeight: 600, color: 'var(--blue-300)', letterSpacing: '0.5px', textTransform: 'uppercase' } }, 'Smart Proxy'),
+          h('div', { style: { fontSize: 11, color: 'var(--slate-400)', marginTop: 2 } }, health ? 'Active' : 'Unreachable')
+        ),
+        // Arrow
+        h('div', { style: { flex: 1, maxWidth: 80, height: 2, background: health ? 'linear-gradient(90deg, var(--blue-500), var(--blue-300))' : 'var(--border)' } }),
+        // Primary Node
+        h('div', { style: { textAlign: 'center', padding: '16px 24px', background: !isFailover ? 'rgba(37,99,235,0.1)' : 'var(--navy-700)', border: `1px solid ${!isFailover ? 'var(--blue-400)' : 'rgba(130,154,177,0.3)'}`, borderRadius: 'var(--radius-lg)', minWidth: 140 } },
+          h('div', { style: { fontSize: 24, marginBottom: 6 } }, '💻'),
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--white)' } }, health?.node_id || 'Primary Node'),
+          h('div', { style: { fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', marginTop: 2, color: !isFailover ? 'var(--blue-300)' : 'var(--slate-500)' } }, !isFailover ? 'Active' : 'Standby'),
+          h('div', { style: { marginTop: 6 } }, h(Badge, { status: health ? (!isFailover ? 'PRIMARY' : 'STANDBY') : 'OFFLINE' }))
+        ),
+        // Heartbeat line
+        h('div', { style: { flex: 1, maxWidth: 80, height: 2, background: 'var(--border)' } }),
+        // DR Node
+        h('div', { style: { textAlign: 'center', padding: '16px 24px', background: isFailover ? 'rgba(37,99,235,0.1)' : 'var(--navy-700)', border: `1px solid ${isFailover ? 'var(--blue-400)' : 'rgba(130,154,177,0.3)'}`, borderRadius: 'var(--radius-lg)', minWidth: 140 } },
+          h('div', { style: { fontSize: 24, marginBottom: 6 } }, '📱'),
+          h('div', { style: { fontSize: 13, fontWeight: 600, color: 'var(--white)' } }, phoneHealth?.node_id || 'DR Node'),
+          h('div', { style: { fontSize: 10, fontWeight: 600, letterSpacing: '0.5px', textTransform: 'uppercase', marginTop: 2, color: isFailover ? 'var(--blue-300)' : 'var(--slate-500)' } }, isFailover ? 'Active' : 'Standby'),
+          h('div', { style: { marginTop: 6 } }, h(Badge, { status: phoneHealth ? (isFailover ? 'ACTIVE' : 'STANDBY') : 'OFFLINE' }))
+        )
+      )
+    ),
+
+    // Metrics and events
+    h('div', { className: 'grid-2' },
+      h('div', { className: 'card' },
+        h('div', { className: 'card-title' }, 'Key Metrics'),
+        h('div', { className: 'stack', style: { gap: 0 } },
+          h('div', { className: 'info-row' }, h('span', { className: 'info-label' }, 'Primary Uptime'), h('span', { className: 'info-value' }, fmt_uptime(health?.uptime_seconds))),
+          h('div', { className: 'info-row' }, h('span', { className: 'info-label' }, 'DR Node Uptime'), h('span', { className: 'info-value' }, fmt_uptime(phoneHealth?.uptime_seconds))),
+          h('div', { className: 'info-row' }, h('span', { className: 'info-label' }, 'Current RPO'), h('span', { className: 'info-value' }, sync?.sync_interval ? `${sync.sync_interval}s` : '3s')),
+          h('div', { className: 'info-row' }, h('span', { className: 'info-label' }, 'DR Mode'), h('span', { className: 'info-value' }, isFailover ? 'Failover' : 'Normal'))
+        )
+      ),
+      h('div', { className: 'card' },
+        h('div', { className: 'card-title' }, 'Recent Critical Events'),
+        criticals.length === 0
+          ? h('div', { style: { color: 'var(--slate-500)', fontSize: 13, padding: '8px 0' } }, 'No unacknowledged critical events')
+          : h('div', { className: 'stack', style: { gap: 6 } },
+              criticals.slice(0, 4).map((ev, i) =>
+                h('div', { key: i, style: { display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' } },
+                  h('span', { style: { fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--slate-600)', flexShrink: 0, paddingTop: 1 } }, fmt_ts(ev.timestamp)),
+                  h('span', { style: { fontSize: 13, color: 'var(--slate-200)', flex: 1 } }, ev.message || ev.details?.reason || ev.event_type)
+                )
+              )
+            )
+      )
+    )
+  );
+}
+// ─── PAGE: EVENTS & LOGS ───
+function PageEvents({ sys }) {
+  const { events, ackEvent } = sys;
+  const [filter, setFilter] = useState('ALL');
+
+  const filters = ['ALL', 'INFO', 'WARNING', 'ERROR', 'FAILOVER', 'RECOVERY', 'SYNC'];
+  const filtered = filter === 'ALL' ? events : events.filter(e => e.event_type?.toUpperCase() === filter || e.severity?.toUpperCase() === filter);
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Events & Logs'),
+      h('div', { className: 'page-desc' }, 'Centralized event history — one canonical view across all system activity')
+    ),
+
+    h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } },
+      filters.map(f => h('button', { key: f, className: `btn btn-sm ${filter === f ? 'btn-primary' : 'btn-secondary'}`, onClick: () => setFilter(f) }, f))
+    ),
+
+    h('div', { className: 'card' },
+      events.length === 0
+        ? h('div', { style: { color: 'var(--slate-500)', fontSize: 13, padding: '8px 0' } }, 'No events yet. Events appear here in real-time as the system operates.')
+        : h('div', null,
+            filtered.slice(0, 100).map((ev, i) => {
+              const type = ev.event_type?.toUpperCase() || ev.severity?.toUpperCase() || 'INFO';
+              const levelColor = { INFO: 'var(--blue-300)', SYNC: 'var(--green-300)', WARNING: 'var(--amber-300)', ERROR: 'var(--red-400)', FAILOVER: 'var(--amber-300)', RECOVERY: 'var(--green-300)' }[type] || 'var(--slate-400)';
+
+              return h('div', { key: ev.id || i, style: { display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', alignItems: 'flex-start' } },
+                h('div', { style: { fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--slate-600)', flexShrink: 0, paddingTop: 1 } }, fmt_ts(ev.timestamp)),
+                h('div', { style: { fontSize: 10, fontWeight: 700, flexShrink: 0, width: 64, paddingTop: 2, color: levelColor } }, type.substring(0, 8)),
+                h('div', { style: { fontSize: 13, color: 'var(--slate-200)', flex: 1 } }, ev.message || ev.details?.reason || ev.event_type || '—'),
+                !ev.acknowledged && h('button', { className: 'btn btn-secondary btn-sm', style: { marginLeft: 'auto', flexShrink: 0 }, onClick: () => ackEvent(ev.id) }, 'Ack')
+              );
+            })
+          )
+    )
+  );
+}
+
+// ─── PAGE: NODES ───
+function PageNodes({ sys }) {
+  const { health, phoneHealth, primaryNode, drNode } = sys;
+
+  function NodePanel({ title, icon, nodeData, healthData, type }) {
+    const isOnline = type === 'primary' ? !!healthData : !!phoneHealth;
+
+    return h('div', { className: 'card' },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 } },
+        h('div', { style: { fontSize: 22 } }, icon),
+        h('div', null,
+          h('div', { style: { fontSize: 15, fontWeight: 700, color: 'var(--white)' } }, title),
+          h('div', { style: { fontSize: 11, color: 'var(--slate-500)', marginTop: 2 } }, type === 'primary' ? 'Laptop / Primary' : 'Android / Termux')
+        ),
+        h('div', { style: { marginLeft: 'auto' } }, h(Badge, { status: isOnline ? 'ONLINE' : 'OFFLINE' }))
+      ),
+      h('div', { className: 'stack', style: { gap: 0 } },
+        ...[
+          ['Node ID', (nodeData?.node_id || healthData?.node_id || '—'), true],
+          ['Role', nodeData?.role || (type === 'primary' ? 'Primary' : 'Secondary'), false],
+          ['IP Address', healthData?.local_ip || nodeData?.local_ip || '—', true],
+          ['Uptime', fmt_uptime(healthData?.uptime_seconds || nodeData?.uptime_seconds), false],
+          ['Peer Last Seen', fmt_rel(healthData?.peer_last_seen), false],
+          ['Sync Version', healthData?.sync_version !== undefined ? `v${healthData.sync_version}` : '—', true],
+        ].map(([lbl, val, mono]) =>
+          h('div', { key: lbl, className: 'info-row' },
+            h('span', { className: 'info-label' }, lbl),
+            h('span', { className: `info-value ${mono ? 'mono' : ''}` }, val)
+          )
+        )
+      )
+    );
+  }
+
+  return h('div', { className: 'fade-in stack' },
+    h('div', { className: 'page-header' },
+      h('div', { className: 'page-title' }, 'Nodes'),
+      h('div', { className: 'page-desc' }, 'Infrastructure details for both SentinelDR nodes')
+    ),
+    h('div', { className: 'grid-2' },
+      h(NodePanel, { title: 'Primary Node', icon: '💻', nodeData: primaryNode, healthData: health, type: 'primary' }),
+      h(NodePanel, { title: 'DR Node', icon: '📱', nodeData: drNode, healthData: phoneHealth, type: 'dr' })
+    )
+  );
+}
+
+// ─── ROOT APP ───
+function App() {
+  const [page, setPage] = useState('dashboard');
+  const sys = useSystem();
+
+  const pages = {
+    dashboard: h(PageDashboard, { sys }),
+    nodes: h(PageNodes, { sys }),
+    events: h(PageEvents, { sys }),
+  };
+
+  return h('div', { className: 'app' },
+    h(Sidebar, { page, setPage, isFailover: sys.isFailover, health: sys.health, phoneHealth: sys.phoneHealth, unackedCount: sys.unackedEvents.length }),
+    h('div', { className: 'main' },
+      h(Header, { page, onRefresh: sys.refresh, loading: sys.loading }),
+      h('main', { className: 'page' }, pages[page] || pages.dashboard)
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+</script>
+</body>
 </html>

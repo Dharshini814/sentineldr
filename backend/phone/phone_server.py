@@ -138,6 +138,8 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
             elif clean_path == "/events":
                 limit = int(query_params.get("limit", 50))
                 self._handle_get_events(limit)
+            elif clean_path == "/dr-status":
+                self._handle_get_dr_status()
             elif clean_path == "/status":
                 self._handle_get_status()
             else:
@@ -221,88 +223,364 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
             self._send_error(500, "Failed to serve portfolio")
     
     def _get_embedded_portfolio(self):
-        """Return the SAME portfolio HTML that laptop server serves.
+        """Return the SAME portfolio HTML that laptop server serves with live DR status.
         
-        ENTERPRISE PATTERN: Content served from embedded path
+        ENTERPRISE PATTERN: Content served with real-time disaster recovery monitoring
         - Both servers serve identical portfolio content
-        - Enterprise-style content delivery
+        - Live status updates for demonstration
+        - Auto-refresh for real-time monitoring
         """
         try:
             # Try to read from the original portfolio file
             portfolio_path = Path(__file__).parent.parent.parent / "frontend" / "portfolio" / "index.html"
             
             if portfolio_path.exists():
-                logger.info("[PORTFOLIO] Serving from original portfolio file (enterprise-consistent)")
+                logger.info("[PORTFOLIO] Serving from original portfolio file with DR status monitoring")
                 with open(portfolio_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+                    original_content = f.read()
+                
+                # Add live DR status monitoring to the original portfolio
+                return self._add_dr_status_to_portfolio(original_content)
             else:
-                # Fallback: embedded minimal portfolio
-                logger.info("[PORTFOLIO] Serving fallback portfolio (file not found)")
-                return '''<!DOCTYPE html>
+                # Fallback: embedded minimal portfolio with DR status
+                logger.info("[PORTFOLIO] Serving fallback portfolio with DR monitoring")
+                return self._get_fallback_portfolio_with_dr_status()
+                
+        except Exception as e:
+            logger.error(f"[PORTFOLIO] Error loading portfolio: {e}")
+            return self._get_basic_fallback_portfolio()
+    
+    def _add_dr_status_to_portfolio(self, original_html):
+        """Add live DR status monitoring to the original portfolio"""
+        # Get real-time DR status
+        dr_status = self._get_dr_status_info()
+        
+        # Create the DR status banner
+        dr_banner = f'''
+    <!-- Live Disaster Recovery Status Banner -->
+    <div id="dr-status-banner" style="
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%);
+        color: white; padding: 15px; text-align: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        border-bottom: 3px solid {dr_status['banner_color']};
+    ">
+        <div style="max-width: 1200px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="
+                    width: 12px; height: 12px; border-radius: 50%;
+                    background: {dr_status['status_color']}; 
+                    animation: pulse 2s infinite;
+                "></div>
+                <strong>🛡️ SentinelDR Status:</strong>
+                <span id="dr-status-text">{dr_status['message']}</span>
+            </div>
+            <div style="font-size: 0.9em; opacity: 0.8;">
+                <span id="dr-uptime">Server: {dr_status['server_info']}</span> | 
+                <span id="dr-sync">Sync: v{dr_status['sync_version']}</span> |
+                <span id="dr-timestamp">Updated: {dr_status['timestamp']}</span>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-refresh DR status every 3 seconds
+        let drStatusInterval;
+        let pageRefreshTimeout;
+        
+        function updateDRStatus() {{
+            fetch('/dr-status')
+                .then(response => response.json())
+                .then(data => {{
+                    document.getElementById('dr-status-text').textContent = data.message;
+                    document.getElementById('dr-uptime').textContent = 'Server: ' + data.server_info;
+                    document.getElementById('dr-sync').textContent = 'Sync: v' + data.sync_version;
+                    document.getElementById('dr-timestamp').textContent = 'Updated: ' + data.timestamp;
+                    
+                    // Update banner color based on status
+                    const banner = document.getElementById('dr-status-banner');
+                    banner.style.borderBottomColor = data.banner_color;
+                    
+                    // Log status changes for demonstration
+                    const currentMessage = data.message;
+                    if (window.lastDRMessage !== currentMessage) {{
+                        console.log('🛡️ SentinelDR Status Change:', currentMessage);
+                        window.lastDRMessage = currentMessage;
+                        
+                        // Show notification for key events
+                        if (currentMessage.includes('PRIMARY SERVER RECOVERED')) {{
+                            showNotification('Primary server came back online! Preparing for handover...', 'success');
+                        }} else if (currentMessage.includes('DISASTER RECOVERY ACTIVE')) {{
+                            showNotification('Disaster recovery mode active - serving from secondary', 'warning');
+                        }} else if (currentMessage.includes('Synchronizing')) {{
+                            showNotification('Synchronizing with primary server...', 'info');
+                        }}
+                    }}
+                    
+                    // Check if we should redirect back to primary
+                    if (data.redirect_to_primary && data.primary_url) {{
+                        clearInterval(drStatusInterval);
+                        showTransferMessage(data.primary_url);
+                    }}
+                }})
+                .catch(err => console.log('DR status update failed:', err));
+        }}
+        
+        function showNotification(message, type) {{
+            // Create a temporary notification
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed; top: 100px; right: 20px; z-index: 10000;
+                background: ${{type === 'success' ? '#27AE60' : type === 'warning' ? '#F39C12' : '#3498DB'}};
+                color: white; padding: 15px 20px; border-radius: 8px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.3); max-width: 400px;
+                transform: translateX(100%); transition: transform 0.3s ease;
+            `;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            // Animate in
+            setTimeout(() => notification.style.transform = 'translateX(0)', 100);
+            
+            // Remove after 4 seconds
+            setTimeout(() => {{
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => document.body.removeChild(notification), 300);
+            }}, 4000);
+        }}
+        
+        function showTransferMessage(primaryUrl) {{
+            console.log('🔄 SentinelDR: Initiating transfer back to primary server');
+            
+            const banner = document.getElementById('dr-status-banner');
+            banner.innerHTML = `
+                <div style="max-width: 1200px; margin: 0 auto; text-align: center;">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 10px;">
+                        <div style="width: 15px; height: 15px; border-radius: 50%; background: #27AE60; animation: pulse 0.8s infinite;"></div>
+                        <strong style="font-size: 1.1em;">🔄 CONTROL TRANSFER IN PROGRESS</strong>
+                        <div style="width: 15px; height: 15px; border-radius: 50%; background: #27AE60; animation: pulse 0.8s infinite;"></div>
+                    </div>
+                    <div style="margin: 10px 0;">
+                        ✅ Primary server recovery confirmed<br>
+                        ✅ Data synchronization completed<br>
+                        ✅ Handover sequence initiated
+                    </div>
+                    <div style="font-size: 1em; margin-top: 15px;">
+                        Redirecting to primary server in <span id="countdown">5</span> seconds
+                    </div>
+                </div>
+            `;
+            banner.style.borderBottomColor = '#27AE60';
+            banner.style.background = 'linear-gradient(135deg, #27AE60, #2ECC71)';
+            
+            // Show success notification
+            showNotification('✅ Primary server recovered! Transferring control back...', 'success');
+            
+            // Countdown and redirect
+            let countdown = 5;
+            const countdownInterval = setInterval(() => {{
+                countdown--;
+                const countdownEl = document.getElementById('countdown');
+                if (countdownEl) countdownEl.textContent = countdown;
+                
+                if (countdown <= 0) {{
+                    clearInterval(countdownInterval);
+                    console.log('🎯 SentinelDR: Redirecting to primary server at', primaryUrl);
+                    window.location.href = primaryUrl;
+                }}
+            }}, 1000);
+        }}
+        
+        // Start DR status monitoring
+        updateDRStatus(); // Initial update
+        drStatusInterval = setInterval(updateDRStatus, 3000); // Update every 3 seconds
+        
+        // Add CSS for pulse animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {{
+                0% {{ opacity: 1; transform: scale(1); }}
+                50% {{ opacity: 0.7; transform: scale(1.1); }}
+                100% {{ opacity: 1; transform: scale(1); }}
+            }}
+        `;
+        document.head.appendChild(style);
+        
+        // Adjust page content to account for fixed banner
+        document.addEventListener('DOMContentLoaded', function() {{
+            document.body.style.paddingTop = '80px';
+        }});
+    </script>
+        '''
+        
+        # Insert the DR banner right after the <body> tag
+        body_index = original_html.find('<body>')
+        if body_index != -1:
+            body_end = original_html.find('>', body_index) + 1
+            modified_html = original_html[:body_end] + dr_banner + original_html[body_end:]
+            return modified_html
+        else:
+            # If no body tag found, just return original with banner prepended
+            return dr_banner + original_html
+    def _get_dr_status_info(self):
+        """Get real-time disaster recovery status information"""
+        # Get current system state
+        in_failover = config.runtime.get("failover_active", False)
+        peer_status = config.runtime.get("peer_status", "unknown")
+        peer_host = config.runtime.get("peer_host")
+        local_ip = get_local_ip()
+        uptime = int(time.time() - config.runtime.get("start_time", time.time()))
+        stats = storage.get_storage_stats()
+        
+        # Check if we just transitioned to primary being healthy
+        previous_peer_status = config.runtime.get("previous_peer_status", "unknown")
+        if peer_status == "healthy" and previous_peer_status != "healthy":
+            logger.warning("🔄 [DR-STATUS] PRIMARY SERVER RECOVERY DETECTED")
+            logger.warning("🔗 [DR-STATUS] Primary server came back online - initiating handover sequence")
+        config.runtime["previous_peer_status"] = peer_status
+        
+        # Determine status message and colors based on current state
+        if peer_status == "healthy" and not in_failover:
+            # Primary is online and healthy - should redirect back
+            message = "🔄 PRIMARY SERVER ONLINE - Preparing to transfer control back to primary server"
+            status_color = "#27AE60"  # Green
+            banner_color = "#27AE60"
+            redirect_to_primary = True
+            logger.info("🎯 [DR-STATUS] Ready to redirect back to primary server")
+        elif peer_status == "healthy" and in_failover:
+            # Primary came back online during failover
+            message = "🔄 PRIMARY SERVER RECOVERED - Synchronizing data and preparing handover"
+            status_color = "#F39C12"  # Orange
+            banner_color = "#F39C12"
+            redirect_to_primary = False  # Wait for sync to complete
+            logger.info("🔄 [DR-STATUS] Primary recovered, sync in progress")
+        elif in_failover:
+            # Active failover mode
+            message = f"🚨 DISASTER RECOVERY ACTIVE - Primary server offline, secondary serving traffic (Uptime: {uptime}s)"
+            status_color = "#E74C3C"  # Red
+            banner_color = "#E74C3C"
+            redirect_to_primary = False
+            if uptime % 30 == 0:  # Log every 30 seconds during DR
+                logger.warning(f"🚨 [DR-STATUS] Active failover - serving traffic for {uptime}s")
+        else:
+            # Standby mode
+            message = f"🛡️ SECONDARY STANDBY - Monitoring primary server health (Uptime: {uptime}s)"
+            status_color = "#3498DB"  # Blue
+            banner_color = "#3498DB"
+            redirect_to_primary = False
+        
+        # Format timestamp
+        timestamp = datetime.now(timezone.utc).strftime("%H:%M:%S UTC")
+        
+        return {
+            "message": message,
+            "status_color": status_color,
+            "banner_color": banner_color,
+            "server_info": f"{config.NODE_ID} ({local_ip}:8001)",
+            "sync_version": stats.get("sync_version", 0),
+            "timestamp": timestamp,
+            "failover_active": in_failover,
+            "peer_status": peer_status,
+            "peer_host": peer_host,
+            "redirect_to_primary": redirect_to_primary,
+            "primary_url": f"http://{peer_host}:{config.PEER_PORT}/" if peer_host else None
+        }
+    
+    def _get_fallback_portfolio_with_dr_status(self):
+        """Fallback portfolio with DR status monitoring"""
+        dr_status = self._get_dr_status_info()
+        
+        return f'''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dharshini J - Portfolio</title>
     <style>
-        body { 
+        body {{ 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            margin: 0; padding: 20px; 
+            margin: 0; padding: 20px; padding-top: 100px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white; min-height: 100vh;
-        }
-        .container { 
+        }}
+        .container {{ 
             max-width: 1000px; margin: 0 auto; 
             background: rgba(255,255,255,0.1); 
             padding: 40px; border-radius: 15px;
-        }
-        h1 { text-align: center; margin-bottom: 30px; font-size: 3em; }
-        .dr-info { 
-            background: rgba(0,150,255,0.2); padding: 20px; 
-            border-radius: 10px; margin: 20px 0; text-align: center;
-        }
-        .content { background: rgba(255,255,255,0.1); padding: 30px; border-radius: 10px; }
+        }}
+        @keyframes pulse {{
+            0% {{ opacity: 1; transform: scale(1); }}
+            50% {{ opacity: 0.7; transform: scale(1.1); }}
+            100% {{ opacity: 1; transform: scale(1); }}
+        }}
     </style>
 </head>
 <body>
+    <div id="dr-status-banner" style="
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        background: linear-gradient(135deg, #2C3E50 0%, #34495E 100%);
+        color: white; padding: 15px; text-align: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        border-bottom: 3px solid {dr_status['banner_color']};
+    ">
+        <div style="max-width: 1200px; margin: 0 auto;">
+            <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+                <div style="
+                    width: 12px; height: 12px; border-radius: 50%;
+                    background: {dr_status['status_color']}; 
+                    animation: pulse 2s infinite;
+                "></div>
+                <strong>🛡️ SentinelDR:</strong>
+                <span id="dr-status-text">{dr_status['message']}</span>
+            </div>
+        </div>
+    </div>
+
     <div class="container">
-        <h1>Dharshini J - Portfolio</h1>
+        <h1>🚀 Dharshini J - Portfolio</h1>
         
-        <div class="dr-info">
+        <div style="background: rgba(0,150,255,0.2); padding: 20px; border-radius: 10px; margin: 20px 0; text-align: center;">
             <h3>🛡️ Served via SentinelDR Disaster Recovery</h3>
-            <p>Portfolio served by secondary server during primary server maintenance.</p>
+            <p>Portfolio served by secondary server with live monitoring.</p>
         </div>
         
-        <div class="content">
+        <div style="background: rgba(255,255,255,0.1); padding: 30px; border-radius: 10px;">
             <h2>Welcome to my Portfolio</h2>
             <p>BCA student at SSMRV College, Bengaluru building real-world systems.</p>
             
-            <h3>Experience</h3>
-            <ul>
-                <li><strong>Python Technology Stack Intern</strong> - Infosys Springboard</li>
-                <li><strong>Cybersecurity Intern</strong> - Corizo</li>
-            </ul>
-            
-            <h3>Projects</h3>
-            <ul>
-                <li><strong>SentinelDR</strong> - Disaster Recovery System (Current)</li>
-                <li><strong>BillingPro</strong> - SaaS Billing Platform</li>
-                <li><strong>Aura Resume</strong> - ATS Resume Builder</li>
-            </ul>
-            
-            <h3>Contact</h3>
+            <h3>📧 Contact</h3>
             <p>Email: dharshinijofficial@gmail.com</p>
             <p>LinkedIn: linkedin.com/in/dharshinijreddy</p>
             <p>GitHub: github.com/Dharshini814</p>
         </div>
     </div>
+    
+    <script>
+        setInterval(() => {{
+            fetch('/dr-status')
+                .then(response => response.json())
+                .then(data => {{
+                    document.getElementById('dr-status-text').textContent = data.message;
+                    
+                    if (data.redirect_to_primary && data.primary_url) {{
+                        window.location.href = data.primary_url;
+                    }}
+                }})
+                .catch(err => console.log('Status update failed'));
+        }}, 3000);
+    </script>
 </body>
 </html>'''
-        except Exception as e:
-            logger.error(f"[PORTFOLIO] Error loading portfolio: {e}")
-            return self._get_basic_fallback_portfolio()
     
     def _get_basic_fallback_portfolio(self):
+        """Basic fallback if all else fails"""
+        return '''<!DOCTYPE html>
+<html><head><title>Dharshini J - Portfolio</title></head>
+<body style="font-family: Arial; padding: 40px; background: #f0f0f0;">
+<h1>Dharshini J - Portfolio</h1>
+<p>Portfolio served via SentinelDR disaster recovery system.</p>
+<p>Contact: dharshinijofficial@gmail.com</p>
+</body></html>'''
         """Basic fallback if all else fails"""
         return '''<!DOCTYPE html>
 <html><head><title>Dharshini J - Portfolio</title></head>
@@ -415,6 +693,15 @@ class SentinelDRHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             logger.error("[EVENTS] List error: %s", exc)
             self._send_error(503, "Storage unavailable")
+
+    def _handle_get_dr_status(self):
+        """GET /dr-status — Live disaster recovery status for AJAX updates."""
+        try:
+            dr_status = self._get_dr_status_info()
+            self._send_json(dr_status)
+        except Exception as exc:
+            logger.error("[DR-STATUS] Error: %s", exc)
+            self._send_error(500, "DR status check failed")
 
     def _handle_get_status(self):
         """GET /status — Full status information."""
