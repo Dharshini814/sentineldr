@@ -501,10 +501,12 @@ const h = React.createElement;
 const BASE_URL = 'http://localhost:8000';
 const PHONE_URL = 'http://localhost:8001';
 const API_KEY = 'my-project-final';
+const VERSION = '1.1'; // Force cache refresh
 
 // ─── API LAYER ───
 async function apiFetch(url, opts = {}) {
   try {
+    console.log(`API Call: ${url}`); // Debug logging
     const res = await fetch(url, {
       headers: { 
         'Content-Type': 'application/json', 
@@ -515,6 +517,9 @@ async function apiFetch(url, opts = {}) {
     });
     if (!res.ok) {
       console.error(`API Error: ${res.status} - ${res.statusText} for ${url}`);
+      if (res.status === 401) {
+        console.error(`Authentication failed - API Key: ${API_KEY}`);
+      }
       return null;
     }
     const ct = res.headers.get('content-type') || '';
@@ -1948,6 +1953,14 @@ function PageSettings({ sys }) {
 function App() {
   const [page, setPage] = useState('dashboard');
   const sys = useSystem();
+
+  // Clear any cached data on load
+  useEffect(() => {
+    if (typeof Storage !== "undefined") {
+      localStorage.clear();
+      sessionStorage.clear();
+    }
+  }, []);
 
   const pages = {
     dashboard: h(PageDashboard, { sys }),

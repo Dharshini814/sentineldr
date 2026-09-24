@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SentinelDR API Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #0B1628; color: #F0F4F8; }
+        .result { margin: 10px 0; padding: 10px; background: #111F38; border-radius: 5px; }
+        .success { border-left: 4px solid #10B981; }
+        .error { border-left: 4px solid #EF4444; }
+        button { padding: 10px 20px; background: #2563EB; color: white; border: none; border-radius: 5px; margin: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>SentinelDR API Connection Test</h1>
+    <button onclick="testAPIs()">Test All APIs</button>
+    <button onclick="clearCache()">Clear Browser Cache</button>
+    <div id="results"></div>
+
+    <script>
+        const API_KEY = 'my-project-final';
+        
+        function clearCache() {
+            localStorage.clear();
+            sessionStorage.clear();
+            if ('caches' in window) {
+                caches.keys().then(names => {
+                    names.forEach(name => caches.delete(name));
+                });
+            }
+            document.getElementById('results').innerHTML = '<div class="result success">✅ Browser cache cleared</div>';
+        }
+        
+        async function testAPI(url, name) {
+            try {
+                const res = await fetch(url, {
+                    headers: { 'X-API-Key': API_KEY, 'Cache-Control': 'no-cache' }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    return { name, status: 'success', data: JSON.stringify(data, null, 2) };
+                } else {
+                    return { name, status: 'error', data: `${res.status} - ${res.statusText}` };
+                }
+            } catch (error) {
+                return { name, status: 'error', data: error.message };
+            }
+        }
+        
+        async function testAPIs() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div class="result">Testing APIs...</div>';
+            
+            const tests = [
+                ['http://localhost:8000/health', 'Laptop Health'],
+                ['http://localhost:8001/health', 'Phone Health'],
+                ['http://localhost:8000/nodes', 'Nodes List'],
+                ['http://localhost:8000/events?limit=5', 'Recent Events'],
+                ['http://localhost:8000/sync/status', 'Sync Status']
+            ];
+            
+            const testResults = [];
+            for (const [url, name] of tests) {
+                const result = await testAPI(url, name);
+                testResults.push(result);
+            }
+            
+            results.innerHTML = testResults.map(result => `
+                <div class="result ${result.status}">
+                    <strong>${result.status === 'success' ? '✅' : '❌'} ${result.name}</strong>
+                    <pre style="margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto;">${result.data}</pre>
+                </div>
+            `).join('');
+        }
+        
+        // Auto-test on load
+        window.onload = () => testAPIs();
+    </script>
+</body>
+</html>
