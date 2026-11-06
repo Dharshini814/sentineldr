@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Portfolio</title>
+<title>SentinelDR — High Availability Portfolio</title>
 
 <style>
 * {
@@ -19,24 +19,114 @@ body {
     color: white;
 }
 
+/* Disaster Recovery Status Bar */
+#dr-banner {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    padding: 10px 5%;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    transition: all 0.3s ease;
+}
+
+.dr-banner-laptop {
+    background: #0b1329;
+    border-bottom: 2px solid #38bdf8;
+    color: #f1f5f9;
+}
+
+.dr-banner-phone {
+    background: linear-gradient(90deg, #1e3a8a, #0284c7);
+    border-bottom: 2px solid #60a5fa;
+    color: #ffffff;
+    box-shadow: 0 4px 15px rgba(2, 132, 199, 0.4);
+}
+
+.pulse-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.dot-green {
+    background-color: #22c55e;
+    box-shadow: 0 0 10px #22c55e;
+}
+
+.dot-blue {
+    background-color: #38bdf8;
+    box-shadow: 0 0 10px #38bdf8;
+    animation: blink 1s infinite alternate;
+}
+
+@keyframes blink {
+    from { opacity: 0.6; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1.1); }
+}
+
+/* Failover Screen Overlay */
+#failover-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(11, 15, 25, 0.96);
+    z-index: 999999;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    text-align: center;
+    padding: 20px;
+}
+
+.failover-box {
+    background: #182234;
+    border: 2px solid #ef4444;
+    border-radius: 12px;
+    padding: 30px 40px;
+    max-width: 520px;
+    box-shadow: 0 0 35px rgba(239, 68, 68, 0.4);
+    animation: slideDown 0.25s ease-out;
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
 nav {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 8%;
+    padding: 18px 8%;
     background: #111c32;
-    position: sticky;
-    top: 0;
+    border-bottom: 1px solid #1e293b;
 }
 
 nav h2 {
     color: #38bdf8;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 nav a {
     color: white;
     text-decoration: none;
     margin-left: 20px;
+    font-size: 14px;
+    transition: color 0.2s;
 }
 
 nav a:hover {
@@ -44,7 +134,7 @@ nav a:hover {
 }
 
 .hero {
-    min-height: 85vh;
+    min-height: 75vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -52,7 +142,7 @@ nav a:hover {
 }
 
 .hero h1 {
-    font-size: 48px;
+    font-size: 46px;
     margin-bottom: 15px;
 }
 
@@ -77,14 +167,20 @@ nav a:hover {
     margin-top: 25px;
     font-weight: bold;
     width: fit-content;
+    transition: transform 0.15s, background-color 0.15s;
+}
+
+.btn:hover {
+    background: #7dd3fc;
+    transform: translateY(-2px);
 }
 
 section {
-    padding: 65px 10%;
+    padding: 60px 10%;
 }
 
 section h2 {
-    font-size: 30px;
+    font-size: 28px;
     color: #38bdf8;
     margin-bottom: 25px;
 }
@@ -96,7 +192,7 @@ section p {
 
 .skills, .projects {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: 20px;
 }
 
@@ -114,13 +210,16 @@ section p {
 
 .card p {
     font-size: 14px;
+    color: #94a3b8;
 }
 
 footer {
     text-align: center;
     padding: 25px;
     background: #111c32;
-    color: #cbd5e1;
+    color: #94a3b8;
+    font-size: 13px;
+    border-top: 1px solid #1e293b;
 }
 
 @media(max-width: 600px) {
@@ -128,14 +227,12 @@ footer {
         flex-direction: column;
         gap: 15px;
     }
-
     nav a {
         margin: 5px;
         font-size: 13px;
     }
-
     .hero h1 {
-        font-size: 35px;
+        font-size: 32px;
     }
 }
 </style>
@@ -143,26 +240,58 @@ footer {
 
 <body>
 
+<!-- 1. Real-Time Disaster Recovery Top Banner -->
+<div id="dr-banner" class="dr-banner-laptop">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span id="dr-dot" class="pulse-dot dot-green"></span>
+        <strong id="dr-title">NODE: LAPTOP (PRIMARY ACTIVE — PORT 8000)</strong>
+    </div>
+    <div id="dr-details" style="display: flex; align-items: center; gap: 12px; font-size: 12px;">
+        <span id="dr-standby-info">DR Standby Target: <strong id="dr-phone-target" style="color: #38bdf8;">Connecting...</strong></span>
+        <span id="dr-badge" style="background: rgba(34, 197, 94, 0.2); border: 1px solid #22c55e; color: #4ade80; padding: 2px 8px; border-radius: 4px;">
+            AUTO-FAILOVER: ARMED (&lt;1s)
+        </span>
+        <button id="btn-return-laptop" style="display: none; background: #22c55e; color: #0b0f19; font-weight: bold; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer;" onclick="window.returnToLaptop()">
+            Return to Laptop (:8000)
+        </button>
+    </div>
+</div>
+
+<!-- 2. Instant Failover Screen Overlay (<1.0s trigger) -->
+<div id="failover-overlay">
+    <div class="failover-box">
+        <div style="font-size: 44px; margin-bottom: 8px;">⚡</div>
+        <h2 style="color: #ef4444; margin-bottom: 10px; font-size: 22px; font-weight: 700;">PRIMARY LAPTOP OFFLINE</h2>
+        <p style="color: #cbd5e1; font-size: 14px; margin-bottom: 18px; line-height: 1.5;">
+            Server heartbeat lost! SentinelDR is seamlessly routing your session to the Phone Server (<span style="color: #38bdf8;">Port 8001</span>)...
+        </p>
+        <div style="background: #0f172a; padding: 10px 14px; border-radius: 6px; font-family: monospace; font-size: 13px; color: #38bdf8; margin-bottom: 15px;">
+            Target: <span id="overlay-target-url">http://...:8001/</span><br>
+            Failover Response: <strong style="color: #4ade80;">&lt; 0.8s</strong>
+        </div>
+        <div style="font-size: 12px; color: #94a3b8;">Redirecting automatically...</div>
+    </div>
+</div>
+
 <nav>
-    <h2>MyPortfolio.</h2>
+    <h2>🛡️ SentinelDR Portfolio</h2>
     <div>
         <a href="#home">Home</a>
         <a href="#about">About</a>
         <a href="#skills">Skills</a>
         <a href="#projects">Projects</a>
-        <a href="#contact">Contact</a>
+        <a href="#contact">Contact & Inquiry</a>
+        <a href="/dashboard.html" target="_blank" style="color: #38bdf8; font-weight: 600;">📊 Live Dashboard</a>
     </div>
 </nav>
 
 <div class="hero" id="home">
     <h1>Hello, I'm <span>Your Name</span></h1>
     <p>
-        BCA Student | Cybersecurity Enthusiast |
-        Cloud Architecture Learner
+        BCA Student | Cybersecurity Enthusiast | Cloud & High Availability Architecture Learner
     </p>
-    <p>
-        Passionate about cybersecurity, technology,
-        and building innovative solutions.
+    <p style="margin-top: 10px; color: #94a3b8; font-size: 15px;">
+        Protected by <strong>SentinelDR</strong>: Automated active-standby disaster recovery across Laptop and Mobile Phone.
     </p>
     <a href="#projects" class="btn">Explore My Work</a>
 </div>
@@ -170,11 +299,9 @@ footer {
 <section id="about">
     <h2>About Me</h2>
     <p>
-        I am a BCA student specializing in Cloud Architecture
-        and Cybersecurity. I am interested in ethical hacking,
-        vulnerability assessment, penetration testing, and
-        cloud security. I enjoy learning new technologies
-        and developing practical projects.
+        I am a BCA student specializing in Cloud Architecture and Cybersecurity.
+        I focus on resilient infrastructure, disaster recovery failover algorithms, penetration testing,
+        and building mission-critical full-stack applications that survive server crashes with zero data loss.
     </p>
 </section>
 
@@ -182,23 +309,20 @@ footer {
     <h2>My Skills</h2>
     <div class="skills">
         <div class="card">
-            <h3>Programming</h3>
-            <p>Python, Java, C, C++</p>
+            <h3>Disaster Recovery</h3>
+            <p>Automated Failover, Epoch Leases, Distributed Witness Quorum, Split-Brain Fencing</p>
         </div>
-
+        <div class="card">
+            <h3>Programming</h3>
+            <p>Python, JavaScript, SQL, Shell Scripting, C/C++</p>
+        </div>
         <div class="card">
             <h3>Cybersecurity</h3>
-            <p>Nmap, WPScan, Vulnerability Scanning</p>
+            <p>Vulnerability Assessment, HMAC Authentication, Network Reconnaissance</p>
         </div>
-
         <div class="card">
-            <h3>Database</h3>
-            <p>MySQL</p>
-        </div>
-
-        <div class="card">
-            <h3>Operating Systems</h3>
-            <p>Linux, Windows</p>
+            <h3>Databases</h3>
+            <p>PostgreSQL, SQLite WAL, ACID Transactional Outbox Replication</p>
         </div>
     </div>
 </section>
@@ -206,31 +330,24 @@ footer {
 <section id="projects">
     <h2>My Projects</h2>
     <div class="projects">
-
+        <div class="card">
+            <h3>SentinelDR Framework</h3>
+            <p>High-availability disaster recovery system bridging Laptop (Primary) and Android Phone (Standby) with sub-second failover.</p>
+        </div>
         <div class="card">
             <h3>Vulnerability Scanner</h3>
-            <p>A project focused on identifying security
-            vulnerabilities in systems and applications.</p>
+            <p>Automated tool for detecting misconfigurations, exposed endpoints, and security regressions.</p>
         </div>
-
-        <div class="card">
-            <h3>Task Management System</h3>
-            <p>A system designed to manage tasks,
-            monitor progress and improve productivity.</p>
-        </div>
-
         <div class="card">
             <h3>PhishGuard</h3>
-            <p>A project focused on detecting suspicious
-            and potentially malicious URLs.</p>
+            <p>Intelligent security filter for detecting malicious links and phishing payloads in real time.</p>
         </div>
-
     </div>
 </section>
 
 <section id="contact">
-    <h2>Contact & Portfolio Inquiry</h2>
-    <p>Submit an inquiry directly to the SentinelDR transactional database:</p>
+    <h2>Contact & Real-Time Database Inquiry</h2>
+    <p>Submit a message directly to the transactional ACID database (synchronized between nodes via WAL & Outbox):</p>
     <div style="margin-top: 20px; max-width: 550px; background: #1e293b; padding: 25px; border-radius: 10px; border: 1px solid #334155;">
         <form id="inquiryForm" onsubmit="submitInquiry(event)">
             <div style="margin-bottom: 12px;">
@@ -243,7 +360,7 @@ footer {
             </div>
             <div style="margin-bottom: 12px;">
                 <label style="display: block; font-size: 13px; color: #94a3b8; margin-bottom: 5px;">Subject:</label>
-                <input type="text" id="inq_subject" value="General Inquiry" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px;">
+                <input type="text" id="inq_subject" value="Disaster Recovery Inquiry" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px;">
             </div>
             <div style="margin-bottom: 15px;">
                 <label style="display: block; font-size: 13px; color: #94a3b8; margin-bottom: 5px;">Message:</label>
@@ -257,13 +374,18 @@ footer {
     </div>
 </section>
 
+<footer>
+    <p>© 2026 SentinelDR Portfolio • Protected by Automated Disaster Recovery</p>
+</footer>
+
 <script>
+// --- 1. Portfolio Contact Form Submission ---
 async function submitInquiry(e) {
     e.preventDefault();
     const btn = document.getElementById('submitBtn');
     const res = document.getElementById('inq_result');
     btn.disabled = true;
-    btn.textContent = 'Submitting...';
+    btn.textContent = 'Submitting to ACID Database...';
     res.style.display = 'none';
 
     const payload = {
@@ -285,7 +407,7 @@ async function submitInquiry(e) {
             res.style.background = 'rgba(34, 197, 94, 0.2)';
             res.style.color = '#4ade80';
             res.style.border = '1px solid #22c55e';
-            res.innerHTML = `<strong>Success!</strong> Saved to real database.<br>Operation ID: <code>${data.data.operation_id}</code><br>Outbox status: ${data.data.status}`;
+            res.innerHTML = `<strong>Success!</strong> Record persisted to SQL storage.<br>Operation ID: <code>${data.data.operation_id}</code><br>Outbox status: ${data.data.status}`;
             document.getElementById('inquiryForm').reset();
         } else {
             res.style.background = 'rgba(239, 68, 68, 0.2)';
@@ -303,11 +425,139 @@ async function submitInquiry(e) {
         btn.textContent = 'Submit Inquiry to Database';
     }
 }
-</script>
 
-<footer>
-    <p>© 2026 My Portfolio | Designed by Me</p>
-</footer>
+// --- 2. SentinelDR Sub-Second Auto-Redirect Watchdog ---
+(function() {
+    "use strict";
+
+    const curPort = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
+    const curHost = window.location.hostname || "127.0.0.1";
+    const isLaptop = (curPort === "8000" || curPort === "80");
+    const isPhone = (curPort === "8001");
+
+    // Dynamic Peer URL Resolution
+    let phoneUrl = localStorage.getItem("sdr_phone_url") || `http://${curHost}:8001`;
+    let laptopUrl = localStorage.getItem("sdr_laptop_url") || `http://${curHost}:8000`;
+
+    function updateTargetLabels() {
+        const el = document.getElementById("dr-phone-target");
+        if (el) el.textContent = phoneUrl;
+        const ol = document.getElementById("overlay-target-url");
+        if (ol) ol.textContent = phoneUrl;
+    }
+    updateTargetLabels();
+
+    // Configure visual mode according to active node
+    const banner = document.getElementById("dr-banner");
+    const dot = document.getElementById("dr-dot");
+    const title = document.getElementById("dr-title");
+    const standbyInfo = document.getElementById("dr-standby-info");
+    const badge = document.getElementById("dr-badge");
+    const btnReturn = document.getElementById("btn-return-laptop");
+
+    if (isPhone) {
+        // We are on Phone Node (:8001)
+        banner.className = "dr-banner-phone";
+        dot.className = "pulse-dot dot-blue";
+        title.textContent = "⚡ DISASTER RECOVERY ACTIVE: PHONE NODE (:8001)";
+        standbyInfo.innerHTML = "Primary Node Status: <strong id='laptop-status-text' style='color: #fca5a5;'>OFFLINE (Failover Engaged)</strong>";
+        badge.style.background = "rgba(56, 189, 248, 0.25)";
+        badge.style.borderColor = "#38bdf8";
+        badge.style.color = "#bae6fd";
+        badge.textContent = "DR ACTIVE (FAILOVER <1s)";
+
+        window.returnToLaptop = function() {
+            const dest = laptopUrl.endsWith("/") ? laptopUrl : (laptopUrl + "/");
+            window.location.replace(dest);
+        };
+
+        // Watch for Laptop recovery
+        async function checkLaptopOnline() {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 600);
+                const resp = await fetch(`${laptopUrl}/health`, {
+                    method: "GET",
+                    cache: "no-store",
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if (resp.ok) {
+                    const st = document.getElementById("laptop-status-text");
+                    if (st) st.innerHTML = "<strong style='color: #4ade80;'>ONLINE (Ready for Failback)</strong>";
+                    if (btnReturn) btnReturn.style.display = "inline-block";
+                }
+            } catch (e) {}
+        }
+        setInterval(checkLaptopOnline, 1500);
+
+    } else {
+        // We are on Laptop Node (:8000)
+        // 1. Discover the exact phone URL from server
+        async function syncDiscoveredPhone() {
+            try {
+                const res = await fetch("/api/v1/discovered-peer");
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.ok && json.data && json.data.phone_url) {
+                        phoneUrl = json.data.phone_url;
+                        localStorage.setItem("sdr_phone_url", phoneUrl);
+                        updateTargetLabels();
+                    }
+                }
+            } catch (e) {}
+        }
+        syncDiscoveredPhone();
+        setInterval(syncDiscoveredPhone, 2000);
+
+        // 2. High-Frequency Health Check to trigger redirect within < 1 second of Laptop shutdown
+        let missedPings = 0;
+        let isRedirecting = false;
+
+        async function healthCheckWatchdog() {
+            if (isRedirecting) return;
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 300); // 300ms network timeout
+
+            try {
+                const resp = await fetch("/health", {
+                    method: "GET",
+                    cache: "no-store",
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if (resp.ok) {
+                    missedPings = 0;
+                    return;
+                }
+                missedPings++;
+            } catch (err) {
+                clearTimeout(timeoutId);
+                missedPings++;
+            }
+
+            // 2 consecutive missed pings at 350ms interval = ~700ms elapsed (< 1.0 second)
+            if (missedPings >= 2 && !isRedirecting) {
+                isRedirecting = true;
+                const overlay = document.getElementById("failover-overlay");
+                if (overlay) overlay.style.display = "flex";
+
+                // Ensure clean target URL
+                let dest = phoneUrl.endsWith("/") ? phoneUrl : (phoneUrl + "/");
+                
+                // Trigger sub-second redirection
+                setTimeout(() => {
+                    window.location.replace(dest);
+                }, 150);
+            }
+        }
+
+        // Poll every 350ms
+        setInterval(healthCheckWatchdog, 350);
+    }
+})();
+</script>
 
 </body>
 </html>

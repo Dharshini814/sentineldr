@@ -837,6 +837,7 @@
             const data = await res.json();
             if (data.ok && data.data && data.data.discovered) {
               const url = data.data.phone_url;
+              localStorage.setItem("sdr_phone_url", url);
               document.getElementById("cfg-phone-url").value = url;
               document.getElementById("phone-endpoint").textContent = url;
               if (btn) btn.textContent = `Found: ${data.data.phone_ip}!`;
@@ -865,6 +866,7 @@
               const discJson = await discRes.json();
               if (discJson.ok && discJson.data && discJson.data.discovered) {
                 const autoUrl = discJson.data.phone_url;
+                localStorage.setItem("sdr_phone_url", autoUrl);
                 const pInput = document.getElementById("cfg-phone-url");
                 if (pInput && pInput.value !== autoUrl) {
                   pInput.value = autoUrl;

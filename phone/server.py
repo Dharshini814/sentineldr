@@ -184,6 +184,8 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             self.handle_dashboard_events()
         elif path == ROUTE_ACTIVE_ORIGIN:
             self.handle_active_origin()
+        elif path == "/api/v1/discovered-peer":
+            self.handle_discovered_peer()
 
         # 3. Peer Endpoints
         elif path == "/api/v1/peer/snapshot":
@@ -577,6 +579,17 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             "db_healthy": db_ready,
         }
         resp = make_success(data=data, node_id=self.config.node_id, epoch=self.state_machine.current_epoch)
+        self.send_envelope_response(200, resp)
+
+    def handle_discovered_peer(self):
+        """GET /api/v1/discovered-peer - Returns peer endpoint info."""
+        resp = make_success(data={
+            "phone_url": f"http://{self.config.host}:{self.config.port}",
+            "phone_ip": self.config.host,
+            "phone_port": self.config.port,
+            "laptop_url": self.config.peer_url,
+            "discovered": True
+        }, node_id=self.config.node_id, epoch=self.state_machine.current_epoch)
         self.send_envelope_response(200, resp)
 
 
