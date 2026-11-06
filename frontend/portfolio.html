@@ -439,14 +439,25 @@ async function submitInquiry(e) {
         });
     }
 
-    const curPort = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
-    const curHost = window.location.hostname || "127.0.0.1";
-    const isLaptop = (curPort === "8000" || curPort === "80");
-    const isPhone = (curPort === "8001");
+    const curPort = window.location.port;
+    const curHost = window.location.hostname.toLowerCase();
+    const isDomain = curHost.includes("sentineldr.in");
 
-    // Dynamic Peer URL Resolution
-    let phoneUrl = localStorage.getItem("sdr_phone_url") || `http://${curHost}:8001`;
-    let laptopUrl = localStorage.getItem("sdr_laptop_url") || `http://${curHost}:8000`;
+    // Are we on Phone or Laptop?
+    const isPhone = (curPort === "8001" || curHost.includes("backup-origin"));
+    const isLaptop = !isPhone;
+
+    // Determine target URLs based on environment (Domain vs Local Port)
+    let phoneUrl = "";
+    let laptopUrl = "";
+
+    if (isDomain) {
+        phoneUrl = "https://backup-origin.sentineldr.in";
+        laptopUrl = "https://primary-origin.sentineldr.in";
+    } else {
+        phoneUrl = localStorage.getItem("sdr_phone_url") || `http://${curHost}:8001`;
+        laptopUrl = localStorage.getItem("sdr_laptop_url") || `http://${curHost}:8000`;
+    }
 
     function updateTargetLabels() {
         const el = document.getElementById("dr-phone-target");
@@ -456,7 +467,6 @@ async function submitInquiry(e) {
     }
     updateTargetLabels();
 
-    // Configure visual mode according to active node
     const banner = document.getElementById("dr-banner");
     const dot = document.getElementById("dr-dot");
     const title = document.getElementById("dr-title");
@@ -465,28 +475,28 @@ async function submitInquiry(e) {
     const btnReturn = document.getElementById("btn-return-laptop");
 
     if (isPhone) {
-        // We are on Phone Node (:8001)
+        // We are on Phone Node
         banner.className = "dr-banner-phone";
         dot.className = "pulse-dot dot-blue";
-        title.textContent = "⚡ DISASTER RECOVERY ACTIVE: PHONE NODE (:8001)";
+        title.textContent = isDomain 
+            ? "⚡ DISASTER RECOVERY ACTIVE: PHONE (backup-origin.sentineldr.in)" 
+            : "⚡ DISASTER RECOVERY ACTIVE: PHONE NODE (:8001)";
         standbyInfo.innerHTML = "Primary Node Status: <strong id='laptop-status-text' style='color: #fca5a5;'>OFFLINE (Failover Engaged)</strong>";
         badge.style.background = "rgba(56, 189, 248, 0.25)";
         badge.style.borderColor = "#38bdf8";
         badge.style.color = "#bae6fd";
         badge.textContent = "DR ACTIVE (FAILOVER <1s)";
 
-        // Read return URL from query param (?return_to=...) or localStorage or defaults
+        // Read return URL from query param (?return_to=...) or default to current environment
         const urlParams = new URLSearchParams(window.location.search);
-        let returnUrl = urlParams.get("return_to") || localStorage.getItem("sdr_laptop_url") || "http://localhost:8000";
+        let returnUrl = urlParams.get("return_to") || laptopUrl;
 
-        // Candidate endpoints to test for Laptop recovery
-        const candidates = [
-            returnUrl,
-            "http://localhost:8000",
-            "http://127.0.0.1:8000"
-        ];
-        if (curHost && curHost !== "127.0.0.1" && curHost !== "localhost") {
-            candidates.push(`http://${curHost}:8000`);
+        // Candidate endpoints to probe for Laptop recovery
+        const candidates = [];
+        if (isDomain) {
+            candidates.push("https://primary-origin.sentineldr.in");
+        } else {
+            candidates.push(returnUrl, "http://localhost:8000", "http://127.0.0.1:8000");
         }
 
         let isFailingBack = false;
@@ -523,7 +533,9 @@ async function submitInquiry(e) {
                             titleEl.textContent = "PRIMARY LAPTOP BACK ONLINE!";
                         }
                         if (descEl) {
-                            descEl.innerHTML = "Disaster resolved. Handing back control to Laptop (<strong style='color: #38bdf8;'>Port 8000</strong>)...";
+                            descEl.innerHTML = isDomain
+                                ? "Disaster resolved. Handing back control to Primary Origin (<strong style='color: #38bdf8;'>primary-origin.sentineldr.in</strong>)..."
+                                : "Disaster resolved. Handing back control to Laptop (<strong style='color: #38bdf8;'>Port 8000</strong>)...";
                         }
                         const targetLabel = document.getElementById("overlay-target-url");
                         if (targetLabel) targetLabel.textContent = `${cleanBase}/`;
@@ -539,30 +551,37 @@ async function submitInquiry(e) {
             }
         }
 
-        // Check for Laptop recovery every 400ms!
         setInterval(checkLaptopOnline, 400);
 
     } else {
-        // We are on Laptop Node (:8000)
-        // Store current working origin so failback knows where to return!
-        localStorage.setItem("sdr_laptop_url", window.location.origin);
-
-        // 1. Discover the exact phone URL from server
-        async function syncDiscoveredPhone() {
-            try {
-                const res = await fetch("/api/v1/discovered-peer");
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json.ok && json.data && json.data.phone_url) {
-                        phoneUrl = json.data.phone_url;
-                        localStorage.setItem("sdr_phone_url", phoneUrl);
-                        updateTargetLabels();
-                    }
-                }
-            } catch (e) {}
+        // We are on Laptop Node
+        if (isDomain) {
+            title.textContent = "🟢 NODE: LAPTOP (PRIMARY ACTIVE — primary-origin.sentineldr.in)";
+            standbyInfo.innerHTML = "Standby DR Target: <strong id='dr-phone-target' style='color: #38bdf8;'>backup-origin.sentineldr.in</strong>";
+        } else {
+            localStorage.setItem("sdr_laptop_url", window.location.origin);
+            title.textContent = "🟢 NODE: LAPTOP (PRIMARY ACTIVE — PORT 8000)";
+            standbyInfo.innerHTML = "DR Standby Target: <strong id='dr-phone-target' style='color: #38bdf8;'>Connecting...</strong>";
         }
-        syncDiscoveredPhone();
-        setInterval(syncDiscoveredPhone, 2000);
+
+        // 1. Discover the exact phone URL from server (if local)
+        if (!isDomain) {
+            async function syncDiscoveredPhone() {
+                try {
+                    const res = await fetch("/api/v1/discovered-peer");
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json.ok && json.data && json.data.phone_url) {
+                            phoneUrl = json.data.phone_url;
+                            localStorage.setItem("sdr_phone_url", phoneUrl);
+                            updateTargetLabels();
+                        }
+                    }
+                } catch (e) {}
+            }
+            syncDiscoveredPhone();
+            setInterval(syncDiscoveredPhone, 2000);
+        }
 
         // 2. High-Frequency Health Check to trigger redirect within < 1 second of Laptop shutdown
         let missedPings = 0;
@@ -572,7 +591,7 @@ async function submitInquiry(e) {
             if (isRedirecting) return;
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 300); // 300ms network timeout
+            const timeoutId = setTimeout(() => controller.abort(), 300);
 
             try {
                 const resp = await fetch("/health", {
@@ -591,24 +610,22 @@ async function submitInquiry(e) {
                 missedPings++;
             }
 
-            // 2 consecutive missed pings at 350ms interval = ~700ms elapsed (< 1.0 second)
             if (missedPings >= 2 && !isRedirecting) {
                 isRedirecting = true;
                 const overlay = document.getElementById("failover-overlay");
                 if (overlay) overlay.style.display = "flex";
 
-                // Ensure clean target URL with return_to parameter
                 let baseTarget = phoneUrl.replace(/\/+$/, "");
-                let dest = `${baseTarget}/?return_to=${encodeURIComponent(window.location.origin)}`;
-                
-                // Trigger sub-second redirection
+                let dest = isDomain 
+                    ? `${baseTarget}/` 
+                    : `${baseTarget}/?return_to=${encodeURIComponent(window.location.origin)}`;
+
                 setTimeout(() => {
                     window.location.replace(dest);
                 }, 150);
             }
         }
 
-        // Poll every 350ms
         setInterval(healthCheckWatchdog, 350);
     }
 })();
