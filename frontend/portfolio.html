@@ -455,8 +455,8 @@ async function submitInquiry(e) {
     }
 
     // Dynamic Peer URL Resolution
-    let phoneUrl = storedPhone || (isDomain ? "https://backup-origin.sentineldr.in" : `http://${curHost}:8001`);
-    let laptopUrl = localStorage.getItem("sdr_laptop_url") || (isDomain ? "https://primary-origin.sentineldr.in" : `http://${curHost}:8000`);
+    let phoneUrl = isDomain ? "https://backup-origin.sentineldr.in" : (storedPhone || `http://${curHost}:8001`);
+    let laptopUrl = isDomain ? "https://primary-origin.sentineldr.in" : (localStorage.getItem("sdr_laptop_url") || `http://${curHost}:8000`);
 
     function updateTargetLabels() {
         const el = document.getElementById("dr-phone-target");
@@ -488,7 +488,9 @@ async function submitInquiry(e) {
 
         // Read return URL from query param (?return_to=...) or default to saved laptop url
         const urlParams = new URLSearchParams(window.location.search);
-        let returnUrl = urlParams.get("return_to") || localStorage.getItem("sdr_laptop_url") || (isDomain ? "https://primary-origin.sentineldr.in" : "http://localhost:8000");
+        let returnUrl = isDomain 
+            ? "https://primary-origin.sentineldr.in" 
+            : (urlParams.get("return_to") || localStorage.getItem("sdr_laptop_url") || "http://localhost:8000");
 
         // Guard: returnUrl must NOT point to the phone itself
         if (returnUrl.includes(curHost) || returnUrl.includes("8001") || returnUrl.includes("backup-origin")) {
@@ -548,12 +550,14 @@ async function submitInquiry(e) {
                                 descEl.innerHTML = `Disaster resolved. Handing back control to Laptop (<strong style='color: #38bdf8;'>${returnUrl}</strong>)...`;
                             }
                             const targetLabel = document.getElementById("overlay-target-url");
-                            if (targetLabel) targetLabel.textContent = `${returnUrl}/`;
+                            if (targetLabel) targetLabel.textContent = isDomain ? "https://primary-origin.sentineldr.in/" : `${returnUrl}/`;
 
                             if (overlay) overlay.style.display = "flex";
 
                             setTimeout(() => {
-                                const dest = returnUrl.endsWith("/") ? returnUrl : (returnUrl + "/");
+                                const dest = isDomain 
+                                    ? "https://primary-origin.sentineldr.in/" 
+                                    : (returnUrl.endsWith("/") ? returnUrl : (returnUrl + "/"));
                                 window.location.replace(dest);
                             }, 350);
                             return;
@@ -581,6 +585,13 @@ async function submitInquiry(e) {
         // 1. Discover the exact phone URL from server
         async function syncDiscoveredPhone() {
             try {
+                // If accessed via Cloudflare domain, DR target is ALWAYS https://backup-origin.sentineldr.in
+                if (isDomain) {
+                    phoneUrl = "https://backup-origin.sentineldr.in";
+                    localStorage.setItem("sdr_phone_url", phoneUrl);
+                    updateTargetLabels();
+                    return;
+                }
                 const res = await fetch("/api/v1/discovered-peer");
                 if (res.ok) {
                     const json = await res.json();
@@ -641,9 +652,10 @@ async function submitInquiry(e) {
                 const overlay = document.getElementById("failover-overlay");
                 if (overlay) overlay.style.display = "flex";
 
-                // Always pass the CURRENT origin as return_to so failback returns to the exact domain or port!
-                let baseTarget = phoneUrl.replace(/\/+$/, "");
-                let dest = `${baseTarget}/?return_to=${encodeURIComponent(window.location.origin)}`;
+                // On domain, route directly to https://backup-origin.sentineldr.in/
+                let dest = isDomain 
+                    ? "https://backup-origin.sentineldr.in/"
+                    : `${phoneUrl.replace(/\/+$/, "")}/?return_to=${encodeURIComponent(window.location.origin)}`;
 
                 setTimeout(() => {
                     window.location.replace(dest);

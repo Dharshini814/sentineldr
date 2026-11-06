@@ -1194,6 +1194,12 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
     # --- Unsupported Feature Handlers ---
 
     def handle_unsupported_upload(self):
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+            if content_length > 0:
+                self.rfile.read(min(content_length, 65536))
+        except Exception:
+            pass
         err = make_error(
             code="FEATURE_UNSUPPORTED_DURING_FAILOVER",
             message="File uploads are strictly unsupported during failover and safe mode.",
