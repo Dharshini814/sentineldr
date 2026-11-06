@@ -1254,10 +1254,13 @@ class PhoneServer(ThreadingHTTPServer):
         super().__init__((config.host, config.port), PhoneRequestHandler)
         self.config.port = self.server_port
         self._running = True
-        self._beacon = PhoneBeaconBroadcaster(port=self.config.port, cluster_id=self.config.cluster_id)
-        self._beacon.start()
-        self._monitor_thread = threading.Thread(target=self._auto_failover_monitor, daemon=True)
-        self._monitor_thread.start()
+        self._beacon = None
+        self._monitor_thread = None
+        if "pytest" not in sys.modules and os.environ.get("SDR_TESTING") != "1":
+            self._beacon = PhoneBeaconBroadcaster(port=self.config.port, cluster_id=self.config.cluster_id)
+            self._beacon.start()
+            self._monitor_thread = threading.Thread(target=self._auto_failover_monitor, daemon=True)
+            self._monitor_thread.start()
 
     def _auto_failover_monitor(self):
         """Continuously checks for missed heartbeats from Laptop and auto-promotes after 3 misses."""
@@ -1285,7 +1288,8 @@ class PhoneServer(ThreadingHTTPServer):
         """Cleanly shutdown the HTTP server."""
         self._running = False
         try:
-            self._beacon.stop()
+            if self._beacon:
+                self._beacon.stop()
         except Exception:
             pass
         try:

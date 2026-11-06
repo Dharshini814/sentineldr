@@ -147,11 +147,14 @@ recovery_coordinator = RecoveryCoordinator(
 
 repl_client = ReplicationClient(secret=config.hmac_secret)
 discovery = PeerDiscoveryListener(expected_cluster_id=config.cluster_id)
-discovery.start()
 
 def _on_peer_found(url):
     config.peer_url = url
 discovery.add_on_discovered_callback(_on_peer_found)
+
+# Only start network discovery and background heartbeat workers in production/live server mode, not when imported in test suites
+if "pytest" not in sys.modules and os.environ.get("SDR_TESTING") != "1":
+    discovery.start()
 
 def _laptop_background_worker():
     """Periodically sends heartbeats every 3 seconds to Phone and handles auto-failback."""
@@ -192,8 +195,9 @@ def _laptop_background_worker():
         except Exception:
             pass
 
-_hb_thread = threading.Thread(target=_laptop_background_worker, daemon=True)
-_hb_thread.start()
+if "pytest" not in sys.modules and os.environ.get("SDR_TESTING") != "1":
+    _hb_thread = threading.Thread(target=_laptop_background_worker, daemon=True)
+    _hb_thread.start()
 
 PORTFOLIO_HTML_PATH = os.path.join(BASE_DIR, "frontend", "portfolio.html")
 DASHBOARD_HTML_PATH = os.path.join(BASE_DIR, "frontend", "dashboard.html")

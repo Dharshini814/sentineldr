@@ -211,12 +211,18 @@ class PeerDiscoveryListener:
                 return None
 
         candidates = [f"{prefix}{i}" for i in range(1, 255) if f"{prefix}{i}" != local_ip]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as ex:
+        ex = concurrent.futures.ThreadPoolExecutor(max_workers=30)
+        try:
             futures = [ex.submit(probe, c) for c in candidates]
-            for f in concurrent.futures.as_completed(futures):
+            for f in concurrent.futures.as_completed(futures, timeout=1.5):
                 res = f.result()
                 if res:
+                    ex.shutdown(wait=False, cancel_futures=True)
                     return res
+        except Exception:
+            pass
+        finally:
+            ex.shutdown(wait=False, cancel_futures=True)
         return None
 
     def _get_local_ip(self) -> str:

@@ -274,7 +274,7 @@ footer {
 </div>
 
 <nav>
-    <h2>🛡️ SentinelDR Portfolio</h2>
+    <h2>🛡️ SentinelDR Portfolio <span style="font-size: 14px; opacity: 0.7; font-weight: normal;">(MyPortfolio.)</span></h2>
     <div>
         <a href="#home">Home</a>
         <a href="#about">About</a>
@@ -447,8 +447,15 @@ async function submitInquiry(e) {
     const isPhone = (curPort === "8001" || curHost.includes("backup-origin"));
     const isLaptop = !isPhone;
 
+    // Sanitize any invalid stored phone url (prevent loop pointing to primary-origin or self)
+    let storedPhone = localStorage.getItem("sdr_phone_url");
+    if (storedPhone && (storedPhone.includes("primary-origin") || storedPhone.includes(curHost))) {
+        localStorage.removeItem("sdr_phone_url");
+        storedPhone = null;
+    }
+
     // Dynamic Peer URL Resolution
-    let phoneUrl = localStorage.getItem("sdr_phone_url") || `http://${curHost}:8001`;
+    let phoneUrl = storedPhone || (isDomain ? "https://backup-origin.sentineldr.in" : `http://${curHost}:8001`);
     let laptopUrl = localStorage.getItem("sdr_laptop_url") || (isDomain ? "https://primary-origin.sentineldr.in" : `http://${curHost}:8000`);
 
     function updateTargetLabels() {
@@ -483,6 +490,11 @@ async function submitInquiry(e) {
         const urlParams = new URLSearchParams(window.location.search);
         let returnUrl = urlParams.get("return_to") || localStorage.getItem("sdr_laptop_url") || (isDomain ? "https://primary-origin.sentineldr.in" : "http://localhost:8000");
 
+        // Guard: returnUrl must NOT point to the phone itself
+        if (returnUrl.includes(curHost) || returnUrl.includes("8001") || returnUrl.includes("backup-origin")) {
+            returnUrl = isDomain ? "https://primary-origin.sentineldr.in" : "http://localhost:8000";
+        }
+
         // Candidate endpoints to probe for Laptop recovery
         const candidates = [returnUrl];
         if (returnUrl.includes("primary-origin.sentineldr.in")) {
@@ -492,15 +504,20 @@ async function submitInquiry(e) {
         }
 
         let isFailingBack = false;
+        let consecutiveSuccesses = 0;
+        const pageLoadTime = Date.now();
 
         async function checkLaptopOnline() {
             if (isFailingBack) return;
+
+            // Stabilization guard: wait at least 3 seconds after failover before testing failback
+            if (Date.now() - pageLoadTime < 3000) return;
 
             for (const c of candidates) {
                 try {
                     const cleanBase = c.replace(/\/+$/, "");
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 350);
+                    const timeoutId = setTimeout(() => controller.abort(), isDomain ? 2000 : 800);
                     const resp = await fetch(`${cleanBase}/health`, {
                         method: "GET",
                         cache: "no-store",
@@ -508,41 +525,48 @@ async function submitInquiry(e) {
                     });
                     clearTimeout(timeoutId);
                     if (resp.ok) {
-                        isFailingBack = true;
-                        const overlay = document.getElementById("failover-overlay");
-                        const titleEl = overlay ? overlay.querySelector("h2") : null;
-                        const descEl = overlay ? overlay.querySelector("p") : null;
-                        const iconEl = overlay ? overlay.querySelector(".failover-box > div") : null;
-                        const boxEl = overlay ? overlay.querySelector(".failover-box") : null;
+                        consecutiveSuccesses++;
+                        // Require 2 consecutive successes to prevent flapping
+                        if (consecutiveSuccesses >= 2) {
+                            isFailingBack = true;
+                            const overlay = document.getElementById("failover-overlay");
+                            const titleEl = overlay ? overlay.querySelector("h2") : null;
+                            const descEl = overlay ? overlay.querySelector("p") : null;
+                            const iconEl = overlay ? overlay.querySelector(".failover-box > div") : null;
+                            const boxEl = overlay ? overlay.querySelector(".failover-box") : null;
 
-                        if (boxEl) {
-                            boxEl.style.borderColor = "#22c55e";
-                            boxEl.style.boxShadow = "0 0 35px rgba(34, 197, 94, 0.4)";
-                        }
-                        if (iconEl) iconEl.textContent = "🟢";
-                        if (titleEl) {
-                            titleEl.style.color = "#4ade80";
-                            titleEl.textContent = "PRIMARY LAPTOP BACK ONLINE!";
-                        }
-                        if (descEl) {
-                            descEl.innerHTML = `Disaster resolved. Handing back control to Laptop (<strong style='color: #38bdf8;'>${returnUrl}</strong>)...`;
-                        }
-                        const targetLabel = document.getElementById("overlay-target-url");
-                        if (targetLabel) targetLabel.textContent = `${returnUrl}/`;
+                            if (boxEl) {
+                                boxEl.style.borderColor = "#22c55e";
+                                boxEl.style.boxShadow = "0 0 35px rgba(34, 197, 94, 0.4)";
+                            }
+                            if (iconEl) iconEl.textContent = "🟢";
+                            if (titleEl) {
+                                titleEl.style.color = "#4ade80";
+                                titleEl.textContent = "PRIMARY LAPTOP BACK ONLINE!";
+                            }
+                            if (descEl) {
+                                descEl.innerHTML = `Disaster resolved. Handing back control to Laptop (<strong style='color: #38bdf8;'>${returnUrl}</strong>)...`;
+                            }
+                            const targetLabel = document.getElementById("overlay-target-url");
+                            if (targetLabel) targetLabel.textContent = `${returnUrl}/`;
 
-                        if (overlay) overlay.style.display = "flex";
+                            if (overlay) overlay.style.display = "flex";
 
-                        setTimeout(() => {
-                            const dest = returnUrl.endsWith("/") ? returnUrl : (returnUrl + "/");
-                            window.location.replace(dest);
-                        }, 250);
-                        return;
+                            setTimeout(() => {
+                                const dest = returnUrl.endsWith("/") ? returnUrl : (returnUrl + "/");
+                                window.location.replace(dest);
+                            }, 350);
+                            return;
+                        }
+                        return; // Found a working candidate, don't ping next candidate this round
                     }
-                } catch (e) {}
+                } catch (e) {
+                    consecutiveSuccesses = 0;
+                }
             }
         }
 
-        setInterval(checkLaptopOnline, 400);
+        setInterval(checkLaptopOnline, isDomain ? 1200 : 600);
 
     } else {
         // We are on Laptop Node
@@ -569,17 +593,20 @@ async function submitInquiry(e) {
             } catch (e) {}
         }
         syncDiscoveredPhone();
-        setInterval(syncDiscoveredPhone, 2000);
+        setInterval(syncDiscoveredPhone, 3000);
 
-        // 2. High-Frequency Health Check to trigger redirect within < 1 second of Laptop shutdown
+        // 2. Health Check Watchdog to trigger failover when Laptop is stopped
         let missedPings = 0;
         let isRedirecting = false;
+
+        const pingTimeout = isDomain ? 2500 : 1200;
+        const pingInterval = isDomain ? 1500 : 800;
 
         async function healthCheckWatchdog() {
             if (isRedirecting) return;
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 300);
+            const timeoutId = setTimeout(() => controller.abort(), pingTimeout);
 
             try {
                 const resp = await fetch("/health", {
@@ -598,7 +625,18 @@ async function submitInquiry(e) {
                 missedPings++;
             }
 
-            if (missedPings >= 2 && !isRedirecting) {
+            // Require 3 consecutive missed pings before triggering failover
+            if (missedPings >= 3 && !isRedirecting) {
+                // Self-redirect & loop prevention guard
+                if (!phoneUrl || 
+                    phoneUrl.includes(window.location.hostname) || 
+                    phoneUrl.includes("primary-origin") || 
+                    phoneUrl === window.location.origin) {
+                    console.warn("[SentinelDR] Suppressing failover redirect: DR target invalid or points to self:", phoneUrl);
+                    missedPings = 0;
+                    return;
+                }
+
                 isRedirecting = true;
                 const overlay = document.getElementById("failover-overlay");
                 if (overlay) overlay.style.display = "flex";
@@ -609,11 +647,11 @@ async function submitInquiry(e) {
 
                 setTimeout(() => {
                     window.location.replace(dest);
-                }, 150);
+                }, 200);
             }
         }
 
-        setInterval(healthCheckWatchdog, 350);
+        setInterval(healthCheckWatchdog, pingInterval);
     }
 })();
 </script>
