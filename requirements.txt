@@ -1,0 +1,13 @@
+# SentinelDR Laptop Node Dependencies
+# Python 3.13+ on Windows / Linux
+#
+# CRITICAL ARCHITECTURAL CONSTRAINT:
+# The Phone node (Android Termux) runs on Python standard library ONLY.
+# Do NOT install these or any third-party packages on the Phone node.
+
+fastapi>=0.115.0
+uvicorn>=0.34.0
+pydantic>=2.10.0
+pytest>=8.3.0
+starlette>=0.45.0
+psycopg[binary]>=3.2.0; platform_system != "Android"

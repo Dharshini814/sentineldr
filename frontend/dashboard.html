@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinelDR — Operational Telemetry Dashboard</title>
+  <style>
+    :root {
+      --bg-base: #0b0f19;
+      --bg-surface: #121826;
+      --bg-card: #182234;
+      --bg-card-subtle: #1e2b42;
+      --border-color: #2a3b5c;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+      --color-primary: #38bdf8;
+      --color-success: #22c55e;
+      --color-warning: #f59e0b;
+      --color-danger: #ef4444;
+      --color-unavailable: #64748b;
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      line-height: 1.5;
+      padding: 1.5rem;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: #fff;
+    }
+
+    .brand .badge-cluster {
+      background: var(--bg-card-subtle);
+      border: 1px solid var(--border-color);
+      color: var(--color-primary);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .system-status {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+
+    .pulse-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--color-success);
+      box-shadow: 0 0 8px var(--color-success);
+    }
+    .dot.warning { background-color: var(--color-warning); box-shadow: 0 0 8px var(--color-warning); }
+    .dot.danger { background-color: var(--color-danger); box-shadow: 0 0 8px var(--color-danger); }
+
+    .alert-banner {
+      display: none;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--color-danger);
+      color: #fca5a5;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      font-family: var(--font-mono);
+    }
+
+    .grid-nodes {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.75rem;
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .badge-status {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .badge-online { background: rgba(34, 197, 94, 0.2); color: var(--color-success); border: 1px solid var(--color-success); }
+    .badge-offline { background: rgba(239, 68, 68, 0.2); color: var(--color-danger); border: 1px solid var(--color-danger); }
+    .badge-stale { background: rgba(245, 158, 11, 0.2); color: var(--color-warning); border: 1px solid var(--color-warning); }
+    .badge-unknown { background: rgba(100, 116, 139, 0.2); color: var(--color-unavailable); border: 1px solid var(--color-unavailable); }
+
+    .telemetry-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .telemetry-table td {
+      padding: 0.4rem 0;
+      border-bottom: 1px solid rgba(42, 59, 92, 0.4);
+    }
+    .telemetry-table tr:last-child td {
+      border-bottom: none;
+    }
+    .telemetry-table td.label {
+      color: var(--text-muted);
+      width: 45%;
+    }
+    .telemetry-table td.value {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: #fff;
+      text-align: right;
+    }
+    .val-unavailable {
+      color: var(--text-dim) !important;
+      font-style: italic;
+    }
+
+    .grid-panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .panel-section {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+
+    .panel-section h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--color-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .events-panel {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+
+    .events-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      max-height: 280px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+    }
+
+    .events-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8rem;
+      font-family: var(--font-mono);
+    }
+
+    .events-table th, .events-table td {
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .events-table th {
+      background: var(--bg-card);
+      color: var(--text-muted);
+      position: sticky;
+      top: 0;
+    }
+
+    .sev-INFO { color: var(--color-primary); }
+    .sev-WARNING { color: var(--color-warning); font-weight: bold; }
+    .sev-CRITICAL { color: var(--color-danger); font-weight: bold; }
+
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .config-box {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .config-input {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      width: 160px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>SentinelDR</h1>
+      <span class="badge-cluster" id="cluster-name">sentineldr-cluster-01</span>
+      <span style="font-size: 0.85rem; color: var(--text-muted); margin-left: 0.5rem;">Live Telemetry & DR Operational State</span>
+    </div>
+    <div class="system-status">
+      <div class="pulse-indicator">
+        <span class="dot" id="global-dot"></span>
+        <span id="global-status-text">INITIALIZING</span>
+      </div>
+      <div id="data-age-badge" style="color: var(--text-dim);">Poll Interval: 3.5s</div>
+    </div>
+  </header>
+
+  <div class="alert-banner" id="alert-banner"></div>
+
+  <!-- 1. Node Cards: Online / Offline / Unknown shown separately -->
+  <div class="grid-nodes">
+    <!-- Laptop Node Card -->
+    <div class="card" id="card-laptop">
+      <div class="card-header">
+        <div class="card-title">
+          <span>💻 Laptop Primary</span>
+          <span class="badge-status badge-unknown" id="laptop-badge">UNKNOWN</span>
+        </div>
+        <span id="laptop-age" style="font-size: 0.75rem; color: var(--text-dim);">—</span>
+      </div>
+      <table class="telemetry-table">
+        <tbody>
+          <tr><td class="label">Endpoint</td><td class="value" id="laptop-endpoint">http://127.0.0.1:8000</td></tr>
+          <tr><td class="label">Cluster Role</td><td class="value" id="laptop-role"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Current Epoch</td><td class="value" id="laptop-epoch"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Database Health</td><td class="value" id="laptop-db"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Uptime</td><td class="value" id="laptop-uptime"><span class="val-unavailable">unavailable</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Phone Node Card -->
+    <div class="card" id="card-phone">
+      <div class="card-header">
+        <div class="card-title">
+          <span>📱 Phone Secondary</span>
+          <span class="badge-status badge-unknown" id="phone-badge">UNKNOWN</span>
+        </div>
+        <span id="phone-age" style="font-size: 0.75rem; color: var(--text-dim);">—</span>
+      </div>
+      <table class="telemetry-table">
+        <tbody>
+          <tr><td class="label">Endpoint</td><td class="value" id="phone-endpoint">http://127.0.0.1:8001</td></tr>
+          <tr><td class="label">Cluster Role</td><td class="value" id="phone-role"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Current Epoch</td><td class="value" id="phone-epoch"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Database Health</td><td class="value" id="phone-db"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Uptime</td><td class="value" id="phone-uptime"><span class="val-unavailable">unavailable</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 2. Detailed Telemetry Panels -->
+  <div class="grid-panels">
+    <!-- Ownership & Fencing Panel -->
+    <div class="panel-section">
+      <h3>👑 Ownership & Lease Fencing</h3>
+      <table class="telemetry-table">
+        <tbody>
+          <tr><td class="label">Active Owner</td><td class="value" id="ownership-owner"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Monotonic Epoch</td><td class="value" id="ownership-epoch"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Lease Status</td><td class="value" id="ownership-status"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Remaining Lease</td><td class="value" id="ownership-remaining"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Granted By</td><td class="value" id="ownership-granted"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Dual-Writer Protection</td><td class="value" id="ownership-arbiter">Witness Quorum + Bounded Skew</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Heartbeat & Liveness Panel -->
+    <div class="panel-section">
+      <h3>💓 Heartbeat & Failure Detection</h3>
+      <table class="telemetry-table">
+        <tbody>
+          <tr><td class="label">Cadence Interval</td><td class="value">3.0s expected</td></tr>
+          <tr><td class="label">Elapsed Since Last Beat</td><td class="value" id="hb-elapsed"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Consecutive Misses</td><td class="value" id="hb-misses"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Suspected Offline Limit</td><td class="value">3 misses (~9.0s)</td></tr>
+          <tr><td class="label">Peer Suspected Offline</td><td class="value" id="hb-suspected"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Detection vs Promotion</td><td class="value" style="color: var(--color-primary);">Decoupled (Safe Mode Gate)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Replication & Outbox Pipeline Panel -->
+    <div class="panel-section">
+      <h3>🔄 Replication & Outbox Pipeline</h3>
+      <table class="telemetry-table">
+        <tbody>
+          <tr><td class="label">Laptop Committed Seq</td><td class="value" id="rep-laptop-seq"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Phone Applied Seq</td><td class="value" id="rep-phone-applied"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Replication Lag</td><td class="value" id="rep-lag"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Pending Outbox Items</td><td class="value" id="rep-pending"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Pipeline Status</td><td class="value" id="rep-status"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Deduplication Integrity</td><td class="value" style="color: var(--color-success);">Operation ID (UUID) Enforced</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Recovery & Reconciliation Panel -->
+    <div class="panel-section">
+      <h3>🛡️ Recovery & Integrity State</h3>
+      <table class="telemetry-table">
+        <tbody>
+          <tr><td class="label">Recovery Phase</td><td class="value" id="rec-phase"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Unresolved Conflicts</td><td class="value" id="rec-conflicts"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Physical Integrity Check</td><td class="value" id="rec-integrity"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Point-in-Time Backups</td><td class="value" id="rec-backup">Retained (7-day window)</td></tr>
+          <tr><td class="label">Conflict Policy</td><td class="value" style="color: var(--color-warning);">Preserve & Halt Failback</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Connectivity & Tunnel Panel -->
+    <div class="panel-section" style="grid-column: 1 / -1;">
+      <h3>🌐 Connectivity & Ingress Status</h3>
+      <table class="telemetry-table">
+        <tbody>
+          <tr><td class="label">Direct Peer API Reachability</td><td class="value" id="conn-peer-api"><span class="val-unavailable">unavailable</span></td></tr>
+          <tr><td class="label">Cloudflare Tunnel Status</td><td class="value" id="conn-cloudflare" style="color: var(--text-dim);">NOT_CONFIGURED (Phase 9 Ingress)</td></tr>
+          <tr><td class="label">Security Boundary</td><td class="value" style="color: var(--color-success);">Secrets Redacted; No Privileged Material in Browser</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 3. Audit Log Panel -->
+  <div class="events-panel">
+    <div class="events-panel-header">
+      <h3 style="color: var(--color-primary); font-size: 1rem; font-weight: 600;">📜 Audit Events Stream</h3>
+      <span style="font-size: 0.75rem; color: var(--text-dim);" id="events-count">0 events</span>
+    </div>
+    <div class="table-container">
+      <table class="events-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Node</th>
+            <th>Epoch</th>
+            <th>Severity</th>
+            <th>Event Type</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody id="events-tbody">
+          <tr><td colspan="6" style="text-align: center; color: var(--text-dim);">No audit events received yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="config-box">
+      <span>Laptop URL:</span>
+      <input type="text" id="cfg-laptop-url" class="config-input" value="http://127.0.0.1:8000">
+      <span>Phone URL:</span>
+      <input type="text" id="cfg-phone-url" class="config-input" value="http://127.0.0.1:8001">
+    </div>
+    <div style="font-family: var(--font-mono);">SentinelDR v1.0 • Disaster Recovery Telemetry</div>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      // Detect initial host configuration
+      const curPort = window.location.port;
+      const curHost = window.location.hostname || "127.0.0.1";
+      if (curPort === "8001") {
+        document.getElementById("cfg-phone-url").value = window.location.origin;
+        document.getElementById("cfg-laptop-url").value = `http://${curHost}:8000`;
+      } else {
+        document.getElementById("cfg-laptop-url").value = window.location.origin.includes("http") ? window.location.origin : `http://${curHost}:8000`;
+        document.getElementById("cfg-phone-url").value = `http://${curHost}:8001`;
+      }
+
+      const state = {
+        laptop: { data: null, lastSuccess: 0, status: "UNKNOWN" },
+        phone: { data: null, lastSuccess: 0, status: "UNKNOWN" },
+        events: [],
+        isPolling: false,
+        pollIntervalMs: 3500,
+        timeoutMs: 2500,
+        staleThresholdMs: 8000
+      };
+
+      function renderUnavailable(elemId) {
+        const el = document.getElementById(elemId);
+        if (el) el.innerHTML = '<span class="val-unavailable">unavailable</span>';
+      }
+
+      function setText(elemId, val) {
+        const el = document.getElementById(elemId);
+        if (!el) return;
+        if (val === null || val === undefined || val === "" || val === "unavailable") {
+          el.innerHTML = '<span class="val-unavailable">unavailable</span>';
+        } else {
+          el.textContent = String(val);
+        }
+      }
+
+      async function fetchNodeStatus(url) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), state.timeoutMs);
+        try {
+          const resp = await fetch(`${url}/api/v1/dashboard/status`, {
+            method: "GET",
+            headers: { "Accept": "application/json" },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (!resp.ok) return null;
+          const json = await resp.json();
+          return json.ok ? json.data : null;
+        } catch (e) {
+          clearTimeout(timeoutId);
+          return null;
+        }
+      }
+
+      async function fetchEvents(url) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), state.timeoutMs);
+        try {
+          const resp = await fetch(`${url}/api/v1/dashboard/events`, {
+            method: "GET",
+            headers: { "Accept": "application/json" },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (!resp.ok) return null;
+          const json = await resp.json();
+          return (json.ok && json.data) ? json.data.events : null;
+        } catch (e) {
+          clearTimeout(timeoutId);
+          return null;
+        }
+      }
+
+      function updateNodeCard(nodeKey, badgeId, ageId, roleId, epochId, dbId, uptimeId) {
+        const node = state[nodeKey];
+        const badge = document.getElementById(badgeId);
+        const ageEl = document.getElementById(ageId);
+        const now = Date.now();
+
+        if (node.status === "ONLINE") {
+          const isStale = (now - node.lastSuccess) > state.staleThresholdMs;
+          if (isStale) {
+            badge.className = "badge-status badge-stale";
+            badge.textContent = "STALE DATA";
+          } else {
+            badge.className = "badge-status badge-online";
+            badge.textContent = "ONLINE";
+          }
+          const elapsedSec = Math.round((now - node.lastSuccess) / 1000);
+          ageEl.textContent = `Updated ${elapsedSec}s ago`;
+
+          const d = node.data;
+          setText(roleId, d.role);
+          setText(epochId, d.epoch);
+          setText(dbId, d.db_healthy ? "HEALTHY" : "DEGRADED");
+          setText(uptimeId, `${d.uptime_seconds}s`);
+        } else {
+          badge.className = "badge-status badge-offline";
+          badge.textContent = "OFFLINE";
+          ageEl.textContent = "Unreachable";
+
+          renderUnavailable(roleId);
+          renderUnavailable(epochId);
+          renderUnavailable(dbId);
+          renderUnavailable(uptimeId);
+        }
+      }
+
+      function updatePanels() {
+        // Choose best available source for cluster panels (prefer online node)
+        const activeNode = state.laptop.data || state.phone.data;
+        const alertBanner = document.getElementById("alert-banner");
+
+        if (!activeNode) {
+          // Both nodes offline
+          document.getElementById("global-dot").className = "dot danger";
+          document.getElementById("global-status-text").textContent = "ALL NODES OFFLINE";
+
+          alertBanner.style.display = "block";
+          alertBanner.textContent = "CRITICAL ALERT: All cluster nodes are unreachable. Operational telemetry is unavailable.";
+
+          renderUnavailable("ownership-owner");
+          renderUnavailable("ownership-epoch");
+          renderUnavailable("ownership-status");
+          renderUnavailable("ownership-remaining");
+          renderUnavailable("ownership-granted");
+          renderUnavailable("hb-elapsed");
+          renderUnavailable("hb-misses");
+          renderUnavailable("hb-suspected");
+          renderUnavailable("rep-laptop-seq");
+          renderUnavailable("rep-phone-applied");
+          renderUnavailable("rep-lag");
+          renderUnavailable("rep-pending");
+          renderUnavailable("rep-status");
+          renderUnavailable("rec-phase");
+          renderUnavailable("rec-conflicts");
+          renderUnavailable("rec-integrity");
+          renderUnavailable("conn-peer-api");
+          return;
+        }
+
+        // Global status
+        const isLaptopUp = state.laptop.status === "ONLINE";
+        const isPhoneUp = state.phone.status === "ONLINE";
+
+        if (isLaptopUp && isPhoneUp) {
+          document.getElementById("global-dot").className = "dot";
+          document.getElementById("global-status-text").textContent = "CLUSTER HEALTHY";
+          alertBanner.style.display = "none";
+        } else {
+          document.getElementById("global-dot").className = "dot warning";
+          document.getElementById("global-status-text").textContent = "DEGRADED (1 NODE DOWN)";
+          alertBanner.style.display = "block";
+          const downNode = !isLaptopUp ? "Laptop Primary" : "Phone Secondary";
+          alertBanner.textContent = `OPERATIONAL ALERT: ${downNode} is currently offline. Disaster recovery write fencing or secondary standby is engaged.`;
+        }
+
+        // Ownership
+        const o = activeNode.ownership;
+        if (o) {
+          setText("ownership-owner", o.owner_node_id);
+          setText("ownership-epoch", o.epoch);
+          setText("ownership-status", o.safety_status);
+          setText("ownership-remaining", `${o.remaining_seconds}s`);
+          setText("ownership-granted", o.granted_by);
+        }
+
+        // Heartbeat
+        const hb = activeNode.heartbeat;
+        if (hb) {
+          setText("hb-elapsed", hb.elapsed_seconds !== null ? `${hb.elapsed_seconds}s` : "unavailable");
+          setText("hb-misses", hb.consecutive_misses !== null ? hb.consecutive_misses : "unavailable");
+          setText("hb-suspected", hb.suspected_offline ? "YES (>= 3 misses)" : "NO (Healthy)");
+        }
+
+        // Replication
+        const rep = activeNode.replication;
+        if (rep) {
+          setText("rep-laptop-seq", rep.highest_local_sequence);
+          setText("rep-phone-applied", rep.peer_applied_sequence);
+          setText("rep-lag", rep.lag);
+          setText("rep-pending", rep.pending_outbox_count);
+          setText("rep-status", rep.lag === 0 ? "FULLY_SYNCED" : `LAGGING (${rep.lag} events behind)`);
+        }
+
+        // Recovery
+        const rec = activeNode.recovery;
+        if (rec) {
+          setText("rec-phase", rec.phase);
+          setText("rec-conflicts", rec.unresolved_conflicts);
+          setText("rec-integrity", rec.integrity_status);
+        }
+
+        // Connectivity
+        const conn = activeNode.connectivity;
+        if (conn) {
+          setText("conn-peer-api", conn.peer_api_reachability);
+        }
+      }
+
+      function updateEventsTable() {
+        const tbody = document.getElementById("events-tbody");
+        const countEl = document.getElementById("events-count");
+
+        if (!state.events || state.events.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim);">No audit events received yet</td></tr>';
+          countEl.textContent = "0 events";
+          return;
+        }
+
+        countEl.textContent = `${state.events.length} events`;
+        let html = "";
+        for (const ev of state.events) {
+          const dateStr = new Date(ev.timestamp * 1000).toLocaleTimeString();
+          const detailsStr = typeof ev.details === "object" ? JSON.stringify(ev.details) : (ev.details || "—");
+          html += `<tr>
+            <td>${dateStr}</td>
+            <td>${ev.node_id}</td>
+            <td>${ev.epoch}</td>
+            <td class="sev-${ev.severity}">${ev.severity}</td>
+            <td>${ev.event_type}</td>
+            <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${detailsStr}</td>
+          </tr>`;
+        }
+        tbody.innerHTML = html;
+      }
+
+      async function poll() {
+        if (state.isPolling) return; // Prevent overlapping requests
+        state.isPolling = true;
+
+        const laptopUrl = document.getElementById("cfg-laptop-url").value.trim();
+        const phoneUrl = document.getElementById("cfg-phone-url").value.trim();
+
+        // Query Laptop and Phone concurrently with timeouts
+        const [laptopData, phoneData] = await Promise.all([
+          fetchNodeStatus(laptopUrl),
+          fetchNodeStatus(phoneUrl)
+        ]);
+
+        const now = Date.now();
+        if (laptopData) {
+          state.laptop.data = laptopData;
+          state.laptop.lastSuccess = now;
+          state.laptop.status = "ONLINE";
+        } else {
+          state.laptop.status = "OFFLINE";
+        }
+
+        if (phoneData) {
+          state.phone.data = phoneData;
+          state.phone.lastSuccess = now;
+          state.phone.status = "ONLINE";
+        } else {
+          state.phone.status = "OFFLINE";
+        }
+
+        // Update cards and panels
+        updateNodeCard("laptop", "laptop-badge", "laptop-age", "laptop-role", "laptop-epoch", "laptop-db", "laptop-uptime");
+        updateNodeCard("phone", "phone-badge", "phone-age", "phone-role", "phone-epoch", "phone-db", "phone-uptime");
+        updatePanels();
+
+        // Fetch audit events from whichever node is online
+        let evs = null;
+        if (state.laptop.status === "ONLINE") {
+          evs = await fetchEvents(laptopUrl);
+        } else if (state.phone.status === "ONLINE") {
+          evs = await fetchEvents(phoneUrl);
+        }
+
+        if (evs && evs.length > 0) {
+          state.events = evs;
+          updateEventsTable();
+        }
+
+        state.isPolling = false;
+      }
+
+      // Initial execution and periodic poll
+      poll();
+      setInterval(poll, state.pollIntervalMs);
+    })();
+  </script>
+</body>
+</html>

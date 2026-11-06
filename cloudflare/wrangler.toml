@@ -1,0 +1,15 @@
+name = "sentineldr-router"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+PRIMARY_ORIGIN = "https://primary-origin.sentineldr.in"
+BACKUP_ORIGIN = "https://backup-origin.sentineldr.in"
+EDGE_CACHE_TTL_MS = "1500"
+ROUTING_TIMEOUT_MS = "2500"
+
+# Routes for production deployment
+# User attaches this to the zone sentineldr.in in Cloudflare Dashboard
+routes = [
+  { pattern = "portfolio.sentineldr.in/*", zone_name = "sentineldr.in" }
+]

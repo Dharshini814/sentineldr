@@ -1,0 +1,2 @@
+{"timestamp": "2026-11-05T16:34:55.783927+00:00", "level": "INFO", "logger": "qa_logger", "message": "Normal operational message with SDR_HMAC_SECRET: ***REDACTED***", "node_id": "phone-qa", "epoch": 1, "taskName": null}
+{"timestamp": "2026-11-05T16:34:55.784537+00:00", "level": "WARNING", "logger": "qa_logger", "message": "Peer auth failed with Authorization: Bearer ***REDACTED***", "node_id": "phone-qa", "epoch": 1, "taskName": null}
