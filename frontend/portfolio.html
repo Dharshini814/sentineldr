@@ -430,6 +430,15 @@ async function submitInquiry(e) {
 (function() {
     "use strict";
 
+    // Unregister any legacy Service Worker from previous portfolio projects
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (let r of registrations) {
+                r.unregister();
+            }
+        });
+    }
+
     const curPort = window.location.port || (window.location.protocol === "https:" ? "443" : "80");
     const curHost = window.location.hostname || "127.0.0.1";
     const isLaptop = (curPort === "8000" || curPort === "80");

@@ -264,7 +264,11 @@ async def serve_portfolio():
         raise HTTPException(status_code=404, detail="portfolio.html not found")
     with open(PORTFOLIO_HTML_PATH, "r", encoding="utf-8") as f:
         content = f.read()
-    return HTMLResponse(content=content, status_code=200)
+    return HTMLResponse(
+        content=content,
+        status_code=200,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+    )
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -274,7 +278,11 @@ async def serve_dashboard():
         raise HTTPException(status_code=404, detail="dashboard.html not found")
     with open(DASHBOARD_HTML_PATH, "r", encoding="utf-8") as f:
         content = f.read()
-    return HTMLResponse(content=content, status_code=200)
+    return HTMLResponse(
+        content=content,
+        status_code=200,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+    )
 
 
 
