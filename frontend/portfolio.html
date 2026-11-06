@@ -466,33 +466,78 @@ async function submitInquiry(e) {
         badge.style.color = "#bae6fd";
         badge.textContent = "DR ACTIVE (FAILOVER <1s)";
 
-        window.returnToLaptop = function() {
-            const dest = laptopUrl.endsWith("/") ? laptopUrl : (laptopUrl + "/");
-            window.location.replace(dest);
-        };
+        // Read return URL from query param (?return_to=...) or localStorage or defaults
+        const urlParams = new URLSearchParams(window.location.search);
+        let returnUrl = urlParams.get("return_to") || localStorage.getItem("sdr_laptop_url") || "http://localhost:8000";
 
-        // Watch for Laptop recovery
-        async function checkLaptopOnline() {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 600);
-                const resp = await fetch(`${laptopUrl}/health`, {
-                    method: "GET",
-                    cache: "no-store",
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                if (resp.ok) {
-                    const st = document.getElementById("laptop-status-text");
-                    if (st) st.innerHTML = "<strong style='color: #4ade80;'>ONLINE (Ready for Failback)</strong>";
-                    if (btnReturn) btnReturn.style.display = "inline-block";
-                }
-            } catch (e) {}
+        // Candidate endpoints to test for Laptop recovery
+        const candidates = [
+            returnUrl,
+            "http://localhost:8000",
+            "http://127.0.0.1:8000"
+        ];
+        if (curHost && curHost !== "127.0.0.1" && curHost !== "localhost") {
+            candidates.push(`http://${curHost}:8000`);
         }
-        setInterval(checkLaptopOnline, 1500);
+
+        let isFailingBack = false;
+
+        async function checkLaptopOnline() {
+            if (isFailingBack) return;
+
+            for (const c of candidates) {
+                try {
+                    const cleanBase = c.replace(/\/+$/, "");
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 350);
+                    const resp = await fetch(`${cleanBase}/health`, {
+                        method: "GET",
+                        cache: "no-store",
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    if (resp.ok) {
+                        isFailingBack = true;
+                        const overlay = document.getElementById("failover-overlay");
+                        const titleEl = overlay ? overlay.querySelector("h2") : null;
+                        const descEl = overlay ? overlay.querySelector("p") : null;
+                        const iconEl = overlay ? overlay.querySelector(".failover-box > div") : null;
+                        const boxEl = overlay ? overlay.querySelector(".failover-box") : null;
+
+                        if (boxEl) {
+                            boxEl.style.borderColor = "#22c55e";
+                            boxEl.style.boxShadow = "0 0 35px rgba(34, 197, 94, 0.4)";
+                        }
+                        if (iconEl) iconEl.textContent = "🟢";
+                        if (titleEl) {
+                            titleEl.style.color = "#4ade80";
+                            titleEl.textContent = "PRIMARY LAPTOP BACK ONLINE!";
+                        }
+                        if (descEl) {
+                            descEl.innerHTML = "Disaster resolved. Handing back control to Laptop (<strong style='color: #38bdf8;'>Port 8000</strong>)...";
+                        }
+                        const targetLabel = document.getElementById("overlay-target-url");
+                        if (targetLabel) targetLabel.textContent = `${cleanBase}/`;
+
+                        if (overlay) overlay.style.display = "flex";
+
+                        setTimeout(() => {
+                            window.location.replace(`${cleanBase}/`);
+                        }, 250);
+                        return;
+                    }
+                } catch (e) {}
+            }
+        }
+
+        // Check for Laptop recovery every 400ms!
+        setInterval(checkLaptopOnline, 400);
 
     } else {
         // We are on Laptop Node (:8000)
+        // Store current working origin so failback knows where to return!
+        localStorage.setItem("sdr_laptop_url", window.location.origin);
+
         // 1. Discover the exact phone URL from server
         async function syncDiscoveredPhone() {
             try {
@@ -543,8 +588,9 @@ async function submitInquiry(e) {
                 const overlay = document.getElementById("failover-overlay");
                 if (overlay) overlay.style.display = "flex";
 
-                // Ensure clean target URL
-                let dest = phoneUrl.endsWith("/") ? phoneUrl : (phoneUrl + "/");
+                // Ensure clean target URL with return_to parameter
+                let baseTarget = phoneUrl.replace(/\/+$/, "");
+                let dest = `${baseTarget}/?return_to=${encodeURIComponent(window.location.origin)}`;
                 
                 // Trigger sub-second redirection
                 setTimeout(() => {

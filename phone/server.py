@@ -627,6 +627,12 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
 
         # Record with receiver's OWN clock
         received_at = self.heartbeat_tracker.record_heartbeat(payload)
+
+        # Failback: If Laptop returned online as PRIMARY_ACTIVE, step down to SECONDARY_STANDBY
+        if payload.get("sender_state") == STATE_PRIMARY_ACTIVE:
+            if self.state_machine.current_state in (STATE_SECONDARY_ACTIVE, STATE_SUSPECTED_OFFLINE, STATE_PROMOTION_PENDING):
+                print("[Phone Node] Laptop returned online as PRIMARY_ACTIVE! Yielding control back to Laptop (SECONDARY_STANDBY)...", flush=True)
+                self.state_machine.transition_to(STATE_SECONDARY_STANDBY)
         peer_node_id = payload["sender_node_id"]
         checkpoint = self.db.get_replication_checkpoint(peer_node_id)
         highest_applied = checkpoint["last_applied_sequence"]

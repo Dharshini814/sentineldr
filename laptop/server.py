@@ -200,10 +200,10 @@ DASHBOARD_HTML_PATH = os.path.join(BASE_DIR, "frontend", "dashboard.html")
 
 app = FastAPI(title="SentinelDR Laptop Node", version="1.0.0", docs_url=None, redoc_url=None)
 
-# Restrict CORS to real frontend origins (no wildcard with credentials)
+# Permissive CORS for cross-device failover & failback
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=list(ALLOWED_ORIGINS),
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
