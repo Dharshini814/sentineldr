@@ -562,11 +562,40 @@ async def get_dashboard_events():
 @app.get("/api/v1/discovered-peer")
 async def get_discovered_peer():
     """Returns the automatically discovered Phone IP and port."""
+    if not discovery.discovered_phone_ip:
+        found = discovery._fast_sweep_subnet()
+        if found:
+            discovery.discovered_phone_ip = found
+            config.peer_url = f"http://{found}:{discovery.discovered_phone_port}"
+
     return JSONResponse(status_code=200, content=make_success({
         "phone_url": discovery.phone_url,
         "discovered": discovery.discovered_phone_ip is not None,
         "phone_ip": discovery.discovered_phone_ip or "127.0.0.1",
         "phone_port": discovery.discovered_phone_port
+    }, config.node_id, state_machine.current_epoch))
+
+
+@app.post("/api/v1/peer/register")
+async def post_peer_register(request: Request):
+    """Allows Phone to announce its IP and port to the Laptop dynamically."""
+    client_ip = request.client.host if request.client else "127.0.0.1"
+    port = 8001
+    try:
+        body = await request.body()
+        if body:
+            data = json.loads(body.decode("utf-8"))
+            port = data.get("port", 8001)
+    except Exception:
+        pass
+    phone_url = f"http://{client_ip}:{port}"
+    config.peer_url = phone_url
+    discovery.discovered_phone_ip = client_ip
+    discovery.discovered_phone_port = port
+    print(f"[Laptop Node] Phone registered its endpoint: {phone_url}!", flush=True)
+    return JSONResponse(status_code=200, content=make_success({
+        "registered": True,
+        "phone_url": phone_url
     }, config.node_id, state_machine.current_epoch))
 
 

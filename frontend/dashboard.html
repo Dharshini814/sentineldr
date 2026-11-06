@@ -485,6 +485,9 @@
       <input type="text" id="cfg-laptop-url" class="config-input" value="http://127.0.0.1:8000">
       <span>Phone URL:</span>
       <input type="text" id="cfg-phone-url" class="config-input" value="http://127.0.0.1:8001">
+      <button id="btn-scan-phone" onclick="window.scanForPhone()" style="background: var(--color-primary); color: #0b0f19; font-weight: 600; border: none; border-radius: 4px; padding: 0.3rem 0.7rem; font-size: 0.75rem; cursor: pointer;">
+        🔍 Auto-Detect Phone
+      </button>
     </div>
     <div style="font-family: var(--font-mono);">SentinelDR v1.0 • Disaster Recovery Telemetry</div>
   </div>
@@ -825,12 +828,37 @@
         }
       };
 
+      window.scanForPhone = async function () {
+        const btn = document.getElementById("btn-scan-phone");
+        if (btn) btn.textContent = "Scanning Subnet...";
+        try {
+          const res = await fetch("/api/v1/scan-now");
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ok && data.data && data.data.discovered) {
+              const url = data.data.phone_url;
+              document.getElementById("cfg-phone-url").value = url;
+              document.getElementById("phone-endpoint").textContent = url;
+              if (btn) btn.textContent = `Found: ${data.data.phone_ip}!`;
+              state.phoneDiscovered = true;
+              setTimeout(() => { if (btn) btn.textContent = "🔍 Auto-Detect Phone"; }, 4000);
+              poll();
+              return;
+            }
+          }
+        } catch (e) {}
+        if (btn) {
+          btn.textContent = "Not Found (Retry)";
+          setTimeout(() => { if (btn) btn.textContent = "🔍 Auto-Detect Phone"; }, 2500);
+        }
+      };
+
       async function poll() {
         if (state.isPolling) return; // Prevent overlapping requests
         state.isPolling = true;
 
-        // Auto-discover Phone IP without manual configuration
-        if (!state.phoneDiscovered) {
+        // Auto-discover Phone IP if currently offline or undiscovered
+        if (!state.phoneDiscovered || state.phone.status === "OFFLINE") {
           try {
             const discRes = await fetch("/api/v1/discovered-peer");
             if (discRes.ok) {
@@ -838,7 +866,7 @@
               if (discJson.ok && discJson.data && discJson.data.discovered) {
                 const autoUrl = discJson.data.phone_url;
                 const pInput = document.getElementById("cfg-phone-url");
-                if (pInput && (pInput.value.includes("127.0.0.1") || pInput.value.includes("localhost"))) {
+                if (pInput && pInput.value !== autoUrl) {
                   pInput.value = autoUrl;
                   document.getElementById("phone-endpoint").textContent = autoUrl;
                   state.phoneDiscovered = true;

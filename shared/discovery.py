@@ -18,18 +18,21 @@ BEACON_MAGIC = "sentineldr-beacon"
 
 
 class PhoneBeaconBroadcaster:
-    """Runs in background on Phone; broadcasts UDP discovery beacons to Wi-Fi subnet."""
+    """Runs in background on Phone; broadcasts UDP beacons AND actively registers with Laptop/Dashboard."""
 
     def __init__(self, port: int = 8001, cluster_id: str = "sentineldr-cluster-01"):
         self.port = port
         self.cluster_id = cluster_id
         self._running = False
         self._thread: Optional[threading.Thread] = None
+        self._reg_thread: Optional[threading.Thread] = None
 
     def start(self):
         self._running = True
         self._thread = threading.Thread(target=self._broadcast_loop, daemon=True)
         self._thread.start()
+        self._reg_thread = threading.Thread(target=self._active_registration_loop, daemon=True)
+        self._reg_thread.start()
 
     def stop(self):
         self._running = False
@@ -58,6 +61,47 @@ class PhoneBeaconBroadcaster:
             time.sleep(2.0)
 
         sock.close()
+
+    def _active_registration_loop(self):
+        """Actively finds Laptop (port 8000) or Dashboard (port 8080) on local Wi-Fi subnet and sends registration ping."""
+        import urllib.request
+        time.sleep(1.0)
+        while self._running:
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    s.connect(("8.8.8.8", 80))
+                    my_ip = s.getsockname()[0]
+                except Exception:
+                    my_ip = "127.0.0.1"
+                finally:
+                    s.close()
+
+                if my_ip and not my_ip.startswith("127."):
+                    prefix = ".".join(my_ip.split(".")[:3]) + "."
+                    for target_port in (8080, 8000):
+                        for i in range(1, 255):
+                            target_ip = f"{prefix}{i}"
+                            if target_ip == my_ip:
+                                continue
+                            try:
+                                test_s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                test_s.settimeout(0.08)
+                                test_s.connect((target_ip, target_port))
+                                test_s.close()
+
+                                reg_url = f"http://{target_ip}:{target_port}/api/v1/peer/register"
+                                req = urllib.request.Request(
+                                    reg_url,
+                                    data=json.dumps({"node_id": "phone", "port": self.port}).encode("utf-8"),
+                                    headers={"Content-Type": "application/json"}
+                                )
+                                urllib.request.urlopen(req, timeout=1.0)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+            time.sleep(6.0)
 
 
 class PeerDiscoveryListener:
@@ -132,42 +176,55 @@ class PeerDiscoveryListener:
         sock.close()
 
     def _arp_subnet_scan_loop(self):
-        """Fallback subnet prober in case Wi-Fi router blocks UDP broadcast packets."""
-        time.sleep(3.0)
+        """Active fast subnet prober in case Wi-Fi router blocks UDP broadcast packets."""
+        time.sleep(1.0)
         while self._running:
             if not self.discovered_phone_ip or self.discovered_phone_ip == "127.0.0.1":
                 try:
-                    candidates = self._get_lan_ip_candidates()
-                    for ip in candidates:
-                        if self._probe_phone_ip(ip, self.discovered_phone_port):
-                            self._notify(ip, self.discovered_phone_port)
-                            break
+                    found_ip = self._fast_sweep_subnet()
+                    if found_ip:
+                        self._notify(found_ip, self.discovered_phone_port)
                 except Exception:
                     pass
-            time.sleep(10.0)
+            time.sleep(4.0)
 
-    def _probe_phone_ip(self, ip: str, port: int) -> bool:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.3)
+    def _fast_sweep_subnet(self) -> Optional[str]:
+        """Concurrently sweeps local /24 subnet for open port 8001."""
+        local_ip = self._get_local_ip()
+        if not local_ip or local_ip.startswith("127."):
+            return None
+        parts = local_ip.split(".")
+        if len(parts) != 4:
+            return None
+        prefix = f"{parts[0]}.{parts[1]}.{parts[2]}."
+
+        import concurrent.futures
+
+        def probe(ip_str):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.3)
+            try:
+                s.connect((ip_str, self.discovered_phone_port))
+                s.close()
+                return ip_str
+            except Exception:
+                return None
+
+        candidates = [f"{prefix}{i}" for i in range(1, 255) if f"{prefix}{i}" != local_ip]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=50) as ex:
+            futures = [ex.submit(probe, c) for c in candidates]
+            for f in concurrent.futures.as_completed(futures):
+                res = f.result()
+                if res:
+                    return res
+        return None
+
+    def _get_local_ip(self) -> str:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
-            s.connect((ip, port))
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+        except Exception:
+            return "127.0.0.1"
+        finally:
             s.close()
-            return True
-        except Exception:
-            return False
-
-    def _get_lan_ip_candidates(self) -> list:
-        """Parse local ARP table to find alive IP addresses on Wi-Fi subnet."""
-        ips = []
-        try:
-            out = subprocess.check_output("arp -a", shell=True, text=True, timeout=2)
-            for line in out.splitlines():
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    ip = parts[0]
-                    if ip.startswith("192.168.") or ip.startswith("10.") or ip.startswith("172."):
-                        if not ip.endswith(".255") and not ip.endswith(".1"):
-                            ips.append(ip)
-        except Exception:
-            pass
-        return ips

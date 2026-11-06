@@ -32,7 +32,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         super().end_headers()
@@ -41,12 +41,46 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_response(204)
         self.end_headers()
 
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/")
+
+        # Allow phone to register its IP directly
+        if path == "/api/v1/peer/register":
+            client_ip = self.client_address[0]
+            discovery.discovered_phone_ip = client_ip
+            discovery.discovered_phone_port = 8001
+            print(f"[Dashboard Server] Phone auto-registered successfully from http://{client_ip}:8001!", flush=True)
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            resp_body = json.dumps({
+                "ok": True,
+                "data": {
+                    "registered_ip": client_ip,
+                    "phone_url": f"http://{client_ip}:8001"
+                }
+            }).encode("utf-8")
+            self.send_header("Content-Length", str(len(resp_body)))
+            self.end_headers()
+            self.wfile.write(resp_body)
+            return
+
+        self.send_response(404)
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
         # Auto-discovery endpoint for the browser dashboard
-        if path == "/api/v1/discovered-peer":
+        if path in ("/api/v1/discovered-peer", "/api/v1/scan-now"):
+            # If not discovered yet, run an immediate active sweep
+            if not discovery.discovered_phone_ip:
+                found = discovery._fast_sweep_subnet()
+                if found:
+                    discovery.discovered_phone_ip = found
+
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             resp_body = json.dumps({
@@ -79,7 +113,7 @@ def run_dashboard_server(host: str = "0.0.0.0", port: int = 8080):
     print(f"------------------------------------------------------------")
     print(f"  URL: http://localhost:{port}/")
     print(f"  (Monitors Laptop on :8000 and Phone on :8001 independently)")
-    print(f"  (Auto-Discovery: Active on UDP 8003 & Wi-Fi ARP table)")
+    print(f"  (Auto-Discovery: Active on UDP 8003 & Wi-Fi Subnet Sweeper)")
     print(f"============================================================")
     try:
         server.serve_forever()

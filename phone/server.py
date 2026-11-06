@@ -117,12 +117,11 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
         pass
 
     def _apply_cors_headers(self):
-        """Apply restricted CORS headers only to approved frontend origins."""
-        origin = self.headers.get("Origin")
-        if origin and origin in ALLOWED_ORIGINS:
-            self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept, X-SDR-Node, X-SDR-Epoch")
+        """Apply permissive CORS headers so Laptop and Dashboard browsers can fetch telemetry."""
+        origin = self.headers.get("Origin") or "*"
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
 
     def send_envelope_response(self, status_code: int, envelope: dict):
         """Send standard SentinelDR envelope response."""
@@ -150,16 +149,10 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         """Handle CORS preflight requests."""
         PhoneRequestHandler.request_counter += 1
-        origin = self.headers.get("Origin")
-        if origin and origin in ALLOWED_ORIGINS:
-            self.send_response(204)
-            self._apply_cors_headers()
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-        else:
-            self.send_response(204)
-            self.send_header("Content-Length", "0")
-            self.end_headers()
+        self.send_response(204)
+        self._apply_cors_headers()
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def do_GET(self):
         PhoneRequestHandler.request_counter += 1
@@ -1284,6 +1277,18 @@ class PhoneServer(ThreadingHTTPServer):
             pass
 
 
+def get_phone_ip() -> str:
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
 def create_phone_server(env_file: Optional[str] = None) -> PhoneServer:
     config = NodeConfig(node_type="phone", env_file=env_file)
     return PhoneServer(config)
@@ -1291,12 +1296,20 @@ def create_phone_server(env_file: Optional[str] = None) -> PhoneServer:
 
 def main():
     server = create_phone_server()
-    print(f"Phone node listening on http://{server.config.host}:{server.config.port} (Role: {server.config.initial_role})")
+    ip = get_phone_ip()
+    print("\n============================================================")
+    print(" [SentinelDR Phone Node] RUNNING on port 8001!")
+    print("------------------------------------------------------------")
+    print(f" * Phone Wi-Fi URL:  http://{ip}:{server.config.port}/")
+    print(f" * Localhost URL:    http://127.0.0.1:{server.config.port}/")
+    print(f" * Role:             {server.config.initial_role} (Epoch {server.config.epoch})")
+    print(" * Background note:  Run 'termux-wake-lock' in Termux to keep alive")
+    print("============================================================\n", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down Phone node...")
-        server.server_close()
+        server.stop()
 
 
 if __name__ == "__main__":
