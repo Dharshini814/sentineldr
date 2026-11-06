@@ -47,6 +47,7 @@ wheels/
 *.swp
 *.swo
 *~
+powershell.bat
 
 # Testing & Coverage
 .pytest_cache/

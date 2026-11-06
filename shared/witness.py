@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
@@ -195,7 +195,7 @@ class WitnessRequestHandler(BaseHTTPRequestHandler):
             self.send_envelope_response(404, make_error(ERR_NOT_FOUND, f"Path not found: {parsed.path}", "witness", 0))
 
 
-class WitnessServer(HTTPServer):
+class WitnessServer(ThreadingHTTPServer):
     """Standalone HTTP server for Witness service."""
     allow_reuse_address = True
 

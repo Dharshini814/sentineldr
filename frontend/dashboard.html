@@ -294,7 +294,7 @@
         <span class="dot" id="global-dot"></span>
         <span id="global-status-text">INITIALIZING</span>
       </div>
-      <div id="data-age-badge" style="color: var(--text-dim);">Poll Interval: 3.5s</div>
+      <div id="data-age-badge" style="color: var(--text-dim);">Live Sync: 1.5s</div>
     </div>
   </header>
 
@@ -417,6 +417,43 @@
     </div>
   </div>
 
+  <!-- 2.5 Live Real-Time Database Action Center -->
+  <div class="panel-section" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); background: var(--bg-surface); border-radius: 8px; padding: 1.25rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h3 style="color: var(--color-primary); font-size: 1rem; font-weight: 600;">⚡ Real-Time Database Action Center (ACID SQL Storage)</h3>
+      <div style="display: flex; gap: 0.5rem;">
+        <button id="btn-quick-inquiry" onclick="window.sendQuickInquiry()" style="background: var(--color-primary); color: #0b0f19; font-weight: 600; border: none; border-radius: 4px; padding: 0.45rem 0.9rem; cursor: pointer; font-size: 0.8rem;">
+          + Write Test Inquiry to Real Database
+        </button>
+      </div>
+    </div>
+    <div id="db-action-feedback" style="display: none; padding: 0.6rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-family: var(--font-mono); margin-bottom: 1rem;"></div>
+
+    <div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; display: flex; justify-content: space-between;">
+        <span>Recent Records Persisted in <code>portfolio_inquiries</code> & Outbox</span>
+        <span id="inquiry-count-badge" style="color: var(--color-primary); font-family: var(--font-mono); font-size: 0.8rem;">0 records</span>
+      </div>
+      <div class="table-container" style="max-height: 180px;">
+        <table class="events-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Subject</th>
+              <th>Message</th>
+              <th>Created At</th>
+            </tr>
+          </thead>
+          <tbody id="inquiries-tbody">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-dim);">No inquiries in database yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- 3. Audit Log Panel -->
   <div class="events-panel">
     <div class="events-panel-header">
@@ -462,8 +499,11 @@
       if (curPort === "8001") {
         document.getElementById("cfg-phone-url").value = window.location.origin;
         document.getElementById("cfg-laptop-url").value = `http://${curHost}:8000`;
+      } else if (curPort === "8000") {
+        document.getElementById("cfg-laptop-url").value = window.location.origin;
+        document.getElementById("cfg-phone-url").value = `http://${curHost}:8001`;
       } else {
-        document.getElementById("cfg-laptop-url").value = window.location.origin.includes("http") ? window.location.origin : `http://${curHost}:8000`;
+        document.getElementById("cfg-laptop-url").value = `http://${curHost}:8000`;
         document.getElementById("cfg-phone-url").value = `http://${curHost}:8001`;
       }
 
@@ -471,10 +511,11 @@
         laptop: { data: null, lastSuccess: 0, status: "UNKNOWN" },
         phone: { data: null, lastSuccess: 0, status: "UNKNOWN" },
         events: [],
+        inquiries: [],
         isPolling: false,
-        pollIntervalMs: 3500,
-        timeoutMs: 2500,
-        staleThresholdMs: 8000
+        pollIntervalMs: 1500,
+        timeoutMs: 1500,
+        staleThresholdMs: 4000
       };
 
       function renderUnavailable(elemId) {
@@ -524,6 +565,25 @@
           if (!resp.ok) return null;
           const json = await resp.json();
           return (json.ok && json.data) ? json.data.events : null;
+        } catch (e) {
+          clearTimeout(timeoutId);
+          return null;
+        }
+      }
+
+      async function fetchInquiries(url) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), state.timeoutMs);
+        try {
+          const resp = await fetch(`${url}/api/v1/portfolio/inquiries`, {
+            method: "GET",
+            headers: { "Accept": "application/json" },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+          if (!resp.ok) return null;
+          const json = await resp.json();
+          return (json.ok && json.data) ? json.data.inquiries : null;
         } catch (e) {
           clearTimeout(timeoutId);
           return null;
@@ -684,9 +744,109 @@
         tbody.innerHTML = html;
       }
 
+      function updateInquiriesTable(inqs) {
+        const tbody = document.getElementById("inquiries-tbody");
+        const countBadge = document.getElementById("inquiry-count-badge");
+        if (!inqs || inqs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim);">No inquiries in database yet</td></tr>';
+          countBadge.textContent = "0 records";
+          return;
+        }
+        countBadge.textContent = `${inqs.length} records in SQL`;
+        let html = "";
+        for (const inq of inqs.slice(0, 10)) {
+          const dateStr = inq.created_at ? new Date(inq.created_at * 1000).toLocaleTimeString() : "—";
+          html += `<tr>
+            <td><code>${(inq.id || inq.operation_id || "—").slice(0, 8)}</code></td>
+            <td><strong>${inq.name || "—"}</strong></td>
+            <td>${inq.email || "—"}</td>
+            <td>${inq.subject || "—"}</td>
+            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${inq.message || "—"}</td>
+            <td>${dateStr}</td>
+          </tr>`;
+        }
+        tbody.innerHTML = html;
+      }
+
+      window.sendQuickInquiry = async function () {
+        const btn = document.getElementById("btn-quick-inquiry");
+        const fb = document.getElementById("db-action-feedback");
+        btn.disabled = true;
+        btn.textContent = "Writing to SQL...";
+        fb.style.display = "block";
+        fb.style.background = "var(--bg-card)";
+        fb.style.color = "var(--text-main)";
+        fb.textContent = "Dispatching real API write...";
+
+        // Target whichever node is currently writable
+        const laptopUrl = document.getElementById("cfg-laptop-url").value.trim();
+        const phoneUrl = document.getElementById("cfg-phone-url").value.trim();
+
+        let targetUrl = laptopUrl;
+        if (state.phone.status === "ONLINE" && state.phone.data && state.phone.data.role === "SECONDARY_ACTIVE") {
+          targetUrl = phoneUrl;
+        } else if (state.laptop.status !== "ONLINE" && state.phone.status === "ONLINE") {
+          targetUrl = phoneUrl;
+        }
+
+        const payload = {
+          name: "Live Auditor",
+          email: "qa@sentineldr.internal",
+          subject: "Real-time DB write test",
+          message: `Live test executed at ${new Date().toLocaleTimeString()} (Active target: ${targetUrl})`
+        };
+
+        try {
+          const res = await fetch(`${targetUrl}/api/v1/portfolio/inquiry`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+          if (res.status === 201) {
+            fb.style.background = "rgba(34, 197, 94, 0.2)";
+            fb.style.color = "#4ade80";
+            fb.style.border = "1px solid var(--color-success)";
+            fb.innerHTML = `<strong>SUCCESS (HTTP 201):</strong> Committed atomically to real database at ${targetUrl}.<br>Operation ID: <code>${data.data.operation_id}</code> | Outbox: <code>${data.data.status}</code>`;
+          } else {
+            fb.style.background = "rgba(239, 68, 68, 0.2)";
+            fb.style.color = "#f87171";
+            fb.style.border = "1px solid var(--color-danger)";
+            fb.innerHTML = `<strong>WRITE REJECTED (HTTP ${res.status}):</strong> ${data.error ? data.error.message : "Error"}`;
+          }
+        } catch (e) {
+          fb.style.background = "rgba(239, 68, 68, 0.2)";
+          fb.style.color = "#f87171";
+          fb.innerHTML = `<strong>Network Exception:</strong> Failed to reach ${targetUrl}: ${e.message}`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "+ Write Test Inquiry to Real Database";
+          poll();
+        }
+      };
+
       async function poll() {
         if (state.isPolling) return; // Prevent overlapping requests
         state.isPolling = true;
+
+        // Auto-discover Phone IP without manual configuration
+        if (!state.phoneDiscovered) {
+          try {
+            const discRes = await fetch("/api/v1/discovered-peer");
+            if (discRes.ok) {
+              const discJson = await discRes.json();
+              if (discJson.ok && discJson.data && discJson.data.discovered) {
+                const autoUrl = discJson.data.phone_url;
+                const pInput = document.getElementById("cfg-phone-url");
+                if (pInput && (pInput.value.includes("127.0.0.1") || pInput.value.includes("localhost"))) {
+                  pInput.value = autoUrl;
+                  document.getElementById("phone-endpoint").textContent = autoUrl;
+                  state.phoneDiscovered = true;
+                }
+              }
+            }
+          } catch (e) {}
+        }
 
         const laptopUrl = document.getElementById("cfg-laptop-url").value.trim();
         const phoneUrl = document.getElementById("cfg-phone-url").value.trim();
@@ -719,17 +879,23 @@
         updateNodeCard("phone", "phone-badge", "phone-age", "phone-role", "phone-epoch", "phone-db", "phone-uptime");
         updatePanels();
 
-        // Fetch audit events from whichever node is online
+        // Fetch audit events & inquiries from whichever node is online
         let evs = null;
+        let inqs = null;
         if (state.laptop.status === "ONLINE") {
-          evs = await fetchEvents(laptopUrl);
+          [evs, inqs] = await Promise.all([fetchEvents(laptopUrl), fetchInquiries(laptopUrl)]);
         } else if (state.phone.status === "ONLINE") {
-          evs = await fetchEvents(phoneUrl);
+          [evs, inqs] = await Promise.all([fetchEvents(phoneUrl), fetchInquiries(phoneUrl)]);
         }
 
         if (evs && evs.length > 0) {
           state.events = evs;
           updateEventsTable();
+        }
+
+        if (inqs) {
+          state.inquiries = inqs;
+          updateInquiriesTable(inqs);
         }
 
         state.isPolling = false;

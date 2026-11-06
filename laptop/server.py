@@ -77,6 +77,9 @@ from shared.security import (
     verify_peer_request,
 )
 from shared.state_machine import ClusterStateMachine
+from shared.replication_worker import ReplicationClient
+from shared.discovery import PeerDiscoveryListener
+import threading
 
 
 config = NodeConfig(node_type="laptop")
@@ -84,10 +87,40 @@ logger = setup_logger("laptop_server", node_id=config.node_id, epoch=config.epoc
 db = LaptopDatabase(config.database_url, dev_fallback_sqlite=config.dev_db_fallback)
 nonce_cache = PersistentNonceCache(config.nonce_cache_db)
 heartbeat_tracker = HeartbeatTracker()
+
+# Synchronize initial epoch & ensure valid lease if starting as PRIMARY_ACTIVE
+init_ownership = db.get_ownership(config.cluster_id)
+now_init = time.time()
+if config.initial_role == STATE_PRIMARY_ACTIVE:
+    if not init_ownership or (init_ownership.owner_node_id == config.node_id and init_ownership.lease_expires_at < now_init):
+        expires_at = now_init + 86400.0
+        active_epoch = init_ownership.epoch if init_ownership else config.epoch
+        boot_sig = sign_ownership_record(
+            cluster_id=config.cluster_id,
+            owner_node_id=config.node_id,
+            epoch=active_epoch,
+            lease_id=f"active-lease-{config.node_id}-{active_epoch}",
+            lease_expires_at=expires_at,
+            granted_by="bootstrap",
+            secret=config.hmac_secret
+        )
+        db.set_ownership(OwnershipRecord(
+            cluster_id=config.cluster_id,
+            owner_node_id=config.node_id,
+            epoch=active_epoch,
+            lease_id=f"active-lease-{config.node_id}-{active_epoch}",
+            lease_expires_at=expires_at,
+            granted_by="bootstrap",
+            signature=boot_sig,
+            updated_at=now_init
+        ))
+        init_ownership = db.get_ownership(config.cluster_id)
+
+initial_epoch = init_ownership.epoch if init_ownership else config.epoch
 state_machine = ClusterStateMachine(
     initial_state=config.initial_role,
     node_id=config.node_id,
-    initial_epoch=config.epoch,
+    initial_epoch=initial_epoch,
     audit_callback=db.log_audit_event
 )
 failover_coordinator = FailoverCoordinator(
@@ -111,6 +144,56 @@ recovery_coordinator = RecoveryCoordinator(
     admin_key=config.admin_key,
     max_clock_skew=config.max_clock_skew,
 )
+
+repl_client = ReplicationClient(secret=config.hmac_secret)
+discovery = PeerDiscoveryListener(expected_cluster_id=config.cluster_id)
+discovery.start()
+
+def _on_peer_found(url):
+    config.peer_url = url
+discovery.add_on_discovered_callback(_on_peer_found)
+
+def _laptop_background_worker():
+    """Periodically sends heartbeats every 3 seconds to Phone and handles auto-failback."""
+    while True:
+        time.sleep(3.0)
+        try:
+            # 1. Heartbeat to Phone when Laptop is PRIMARY_ACTIVE
+            if state_machine.current_state == STATE_PRIMARY_ACTIVE:
+                ownership = db.get_ownership(config.cluster_id)
+                lease_id = ownership.lease_id if ownership else "laptop-lease"
+                chk = db.get_replication_checkpoint(config.node_id)
+                last_seq = chk.get("last_applied_sequence", 0) if chk else 0
+                repl_client.send_heartbeat(
+                    peer_url=config.peer_url,
+                    sender_node_id=config.node_id,
+                    sender_state=state_machine.current_state,
+                    epoch=state_machine.current_epoch,
+                    lease_id=lease_id,
+                    last_committed_sequence=last_seq,
+                    database_health="HEALTHY"
+                )
+
+            # 2. Check if Phone was promoted during downtime and trigger recovery/failback
+            elif state_machine.current_state in (STATE_RECOVERING, STATE_SECONDARY_STANDBY):
+                ok, _, peer_data, _ = recovery_coordinator._send_peer_request(config.peer_url, "GET", ROUTE_STATUS)
+                if ok and peer_data and peer_data.get("ok"):
+                    role = peer_data.get("data", {}).get("role")
+                    if role == STATE_SECONDARY_ACTIVE:
+                        print("[Laptop Node] Detected Phone is currently SECONDARY_ACTIVE. Initiating automatic recovery & failback...", flush=True)
+                        rec_ok, rec_msg, _ = recovery_coordinator.start_recovery(config.peer_url)
+                        if rec_ok:
+                            recovery_coordinator.reconcile_from_peer(config.peer_url)
+                            val_ok, _, _ = recovery_coordinator.validate_integrity_before_failback(config.peer_url)
+                            if val_ok:
+                                fb_ok, fb_msg, _ = recovery_coordinator.initiate_failback(config.peer_url)
+                                if fb_ok:
+                                    print("[Laptop Node] Failback completed! Laptop resumed PRIMARY_ACTIVE.", flush=True)
+        except Exception:
+            pass
+
+_hb_thread = threading.Thread(target=_laptop_background_worker, daemon=True)
+_hb_thread.start()
 
 PORTFOLIO_HTML_PATH = os.path.join(BASE_DIR, "frontend", "portfolio.html")
 DASHBOARD_HTML_PATH = os.path.join(BASE_DIR, "frontend", "dashboard.html")
@@ -474,6 +557,17 @@ async def get_dashboard_events():
         epoch=state_machine.current_epoch,
     )
     return JSONResponse(status_code=200, content=resp)
+
+
+@app.get("/api/v1/discovered-peer")
+async def get_discovered_peer():
+    """Returns the automatically discovered Phone IP and port."""
+    return JSONResponse(status_code=200, content=make_success({
+        "phone_url": discovery.phone_url,
+        "discovered": discovery.discovered_phone_ip is not None,
+        "phone_ip": discovery.discovered_phone_ip or "127.0.0.1",
+        "phone_port": discovery.discovered_phone_port
+    }, config.node_id, state_machine.current_epoch))
 
 
 @app.get(ROUTE_ACTIVE_ORIGIN)
@@ -988,6 +1082,13 @@ async def get_portfolio_contact():
     if not contact:
         return JSONResponse(status_code=404, content=make_error(ERR_NOT_FOUND, "Contact details not found", config.node_id, config.epoch))
     return JSONResponse(status_code=200, content=make_success(contact, config.node_id, config.epoch))
+
+
+@app.get("/api/v1/portfolio/inquiries")
+@app.get("/api/v1/inquiries")
+async def get_portfolio_inquiries():
+    inquiries = db.get_inquiries()
+    return JSONResponse(status_code=200, content=make_success({"inquiries": inquiries, "count": len(inquiries)}, config.node_id, config.epoch))
 
 
 # --- 5. Portfolio Protected Write Endpoint ---

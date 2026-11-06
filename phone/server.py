@@ -8,8 +8,9 @@ Port: 8001
 import json
 import os
 import sys
+import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -70,6 +71,7 @@ from shared.security import (
     verify_peer_request,
 )
 from shared.state_machine import ClusterStateMachine
+from shared.discovery import PhoneBeaconBroadcaster
 
 PORTFOLIO_HTML_PATH = os.path.join(BASE_DIR, "frontend", "portfolio.html")
 DASHBOARD_HTML_PATH = os.path.join(BASE_DIR, "frontend", "dashboard.html")
@@ -213,6 +215,8 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             self.handle_get_certifications()
         elif path in ("/api/v1/portfolio/contact", "/api/v1/contact"):
             self.handle_get_contact()
+        elif path in ("/api/v1/portfolio/inquiries", "/api/v1/inquiries"):
+            self.handle_get_inquiries()
 
         # 5. Unsupported Features
         elif path == "/ws":
@@ -1119,6 +1123,10 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             return
         self.send_envelope_response(200, make_success(contact, self.config.node_id, self.config.epoch))
 
+    def handle_get_inquiries(self):
+        inquiries = self.db.get_inquiries()
+        self.send_envelope_response(200, make_success({"inquiries": inquiries, "count": len(inquiries)}, self.config.node_id, self.config.epoch))
+
     # --- Portfolio Protected Write Handler ---
 
     def handle_post_inquiry(self):
@@ -1190,7 +1198,7 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
         self.send_envelope_response(400, err)
 
 
-class PhoneServer(HTTPServer):
+class PhoneServer(ThreadingHTTPServer):
     """Custom HTTPServer maintaining shared application context."""
     allow_reuse_address = True
 
@@ -1200,10 +1208,12 @@ class PhoneServer(HTTPServer):
         self.db = PhoneDatabase(config.database_path)
         self.nonce_cache = PersistentNonceCache(config.nonce_cache_db)
         self.heartbeat_tracker = HeartbeatTracker()
+        init_ownership = self.db.get_ownership(config.cluster_id)
+        initial_epoch = init_ownership.epoch if init_ownership else config.epoch
         self.state_machine = ClusterStateMachine(
             initial_state=config.initial_role,
             node_id=config.node_id,
-            initial_epoch=config.epoch,
+            initial_epoch=initial_epoch,
             audit_callback=self.db.log_audit_event
         )
         self.failover_coordinator = FailoverCoordinator(
@@ -1229,9 +1239,41 @@ class PhoneServer(HTTPServer):
 
         super().__init__((config.host, config.port), PhoneRequestHandler)
         self.config.port = self.server_port
+        self._running = True
+        self._beacon = PhoneBeaconBroadcaster(port=self.config.port, cluster_id=self.config.cluster_id)
+        self._beacon.start()
+        self._monitor_thread = threading.Thread(target=self._auto_failover_monitor, daemon=True)
+        self._monitor_thread.start()
+
+    def _auto_failover_monitor(self):
+        """Continuously checks for missed heartbeats from Laptop and auto-promotes after 3 misses."""
+        while getattr(self, "_running", True):
+            time.sleep(1.0)
+            try:
+                if self.state_machine.current_state == STATE_SECONDARY_STANDBY:
+                    if self.heartbeat_tracker.last_received_at is not None:
+                        misses = self.heartbeat_tracker.evaluate_misses()
+                        if misses >= 3:
+                            self.failover_coordinator.evaluate_heartbeat_timeout()
+                            if self.state_machine.current_state == STATE_SUSPECTED_OFFLINE:
+                                print(f"[Phone Node] Missed {misses} consecutive heartbeats from Laptop! Initiating automatic failover...", flush=True)
+                                ok, msg, _ = self.failover_coordinator.attempt_failover(
+                                    reason=f"Automatic failover: {misses} missed heartbeats from Laptop"
+                                )
+                                if ok:
+                                    print(f"[Phone Node] Promotion successful! Phone is now PRIMARY ACTIVE on port {self.config.port}.", flush=True)
+                                else:
+                                    print(f"[Phone Node] Failover attempt result: {msg}", flush=True)
+            except Exception:
+                pass
 
     def stop(self):
         """Cleanly shutdown the HTTP server."""
+        self._running = False
+        try:
+            self._beacon.stop()
+        except Exception:
+            pass
         try:
             self.shutdown()
         except Exception:
