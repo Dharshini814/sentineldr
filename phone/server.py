@@ -40,8 +40,10 @@ from shared.api_contract import (
     ROUTE_STATUS,
     STATE_FAILBACK_PENDING,
     STATE_PRIMARY_ACTIVE,
+    STATE_PROMOTION_PENDING,
     STATE_SECONDARY_ACTIVE,
     STATE_SECONDARY_STANDBY,
+    STATE_SUSPECTED_OFFLINE,
 )
 from shared.config import NodeConfig
 from shared.failover import FailoverCoordinator
