@@ -33,7 +33,7 @@ CLUSTER_ID = "sentineldr-cluster-01"
 WITNESS_SECRET = "qa-witness-secret-key-12345"
 SHARED_SECRET = "qa-shared-secret-key-67890"
 
-def test_layer8_edge_routing():
+def run_layer8_edge_routing():
     print("=== LAYER 8 CLOUDFLARE EDGE ROUTING & PERIMETER AUDIT ===")
     results = []
 
@@ -141,5 +141,12 @@ def test_layer8_edge_routing():
     phone_srv.stop()
     return results
 
+
+def test_layer8_edge_routing():
+    results = run_layer8_edge_routing()
+    failures = [r for r in results if r[2] != "PASS"]
+    assert not failures, f"Layer 8 failures: {failures}"
+
+
 if __name__ == "__main__":
-    test_layer8_edge_routing()
+    run_layer8_edge_routing()

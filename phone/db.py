@@ -23,6 +23,7 @@ from shared.seed_data import (
     EXPERIENCE_SEED,
     PROFILE_SEED,
     PROJECTS_SEED,
+    RESUME_SEED,
     SKILLS_SEED,
 )
 
@@ -199,7 +200,31 @@ class PhoneDatabase:
                     (CONTACT_SEED["id"], CONTACT_SEED["email"], CONTACT_SEED["linkedin"], CONTACT_SEED["github"], now)
                 )
 
-            # 8. Bootstrap Ownership Record if empty
+            # 8. Resume
+            cur.execute("SELECT 1 FROM portfolio_resume WHERE id = ?", (RESUME_SEED["id"],))
+            if not cur.fetchone():
+                cur.execute(
+                    """
+                    INSERT INTO portfolio_resume (id, name, title, email, phone, location, summary, skills, experience, education, template, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        RESUME_SEED["id"],
+                        RESUME_SEED["name"],
+                        RESUME_SEED["title"],
+                        RESUME_SEED["email"],
+                        RESUME_SEED["phone"],
+                        RESUME_SEED["location"],
+                        RESUME_SEED["summary"],
+                        RESUME_SEED["skills"],
+                        RESUME_SEED["experience"],
+                        RESUME_SEED["education"],
+                        RESUME_SEED["template"],
+                        now,
+                    )
+                )
+
+            # 9. Bootstrap Ownership Record if empty
             cur.execute("SELECT count(*) FROM ownership WHERE cluster_id = ?", (self.cluster_id,))
             if cur.fetchone()[0] == 0:
                 expires_at = now + 86400.0
@@ -299,6 +324,122 @@ class PhoneDatabase:
             return dict(row) if row else None
         finally:
             conn.close()
+
+    def get_resume(self) -> Dict[str, Any]:
+        """Returns the current portfolio resume record, defaulting to RESUME_SEED if not set."""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT id, name, title, email, phone, location, summary, skills, experience, education, template, updated_at "
+                "FROM portfolio_resume LIMIT 1"
+            )
+            row = cur.fetchone()
+            if not row or (row["name"] == "Your Name"):
+                # Auto-upgrade any stale seed row to standard profile
+                cur.execute(
+                    """
+                    INSERT INTO portfolio_resume (id, name, title, email, phone, location, summary, skills, experience, education, template, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        name = excluded.name,
+                        title = excluded.title,
+                        email = excluded.email,
+                        phone = excluded.phone,
+                        location = excluded.location,
+                        summary = excluded.summary,
+                        skills = excluded.skills,
+                        experience = excluded.experience,
+                        education = excluded.education,
+                        template = excluded.template,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        RESUME_SEED["id"], RESUME_SEED["name"], RESUME_SEED["title"],
+                        RESUME_SEED["email"], RESUME_SEED["phone"], RESUME_SEED["location"],
+                        RESUME_SEED["summary"], RESUME_SEED["skills"], RESUME_SEED["experience"],
+                        RESUME_SEED["education"], RESUME_SEED["template"], time.time()
+                    )
+                )
+                conn.commit()
+                return dict(RESUME_SEED)
+            return dict(row)
+        finally:
+            conn.close()
+
+    def save_resume(
+        self,
+        origin_node_id: str,
+        origin_epoch: int,
+        name: str,
+        title: str,
+        email: str,
+        phone: str,
+        location: str,
+        summary: str,
+        skills: str,
+        experience: str,
+        education: str,
+        template: str = "modern",
+        is_primary: bool = True,
+        cluster_id: Optional[str] = None,
+        secret: Optional[str] = None
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[str]]:
+        """
+        Saves updated resume data using protected_write so it is committed atomically
+        to portfolio_resume and change_log for peer synchronization.
+        """
+        now = time.time()
+        resume_id = "default_resume"
+        payload = {
+            "id": resume_id,
+            "name": name,
+            "title": title,
+            "email": email,
+            "phone": phone,
+            "location": location,
+            "summary": summary,
+            "skills": skills,
+            "experience": experience,
+            "education": education,
+            "template": template,
+            "updated_at": now
+        }
+
+        def _do_upsert(cur: sqlite3.Cursor):
+            cur.execute(
+                """
+                INSERT INTO portfolio_resume (id, name, title, email, phone, location, summary, skills, experience, education, template, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    title = excluded.title,
+                    email = excluded.email,
+                    phone = excluded.phone,
+                    location = excluded.location,
+                    summary = excluded.summary,
+                    skills = excluded.skills,
+                    experience = excluded.experience,
+                    education = excluded.education,
+                    template = excluded.template,
+                    updated_at = excluded.updated_at
+                """,
+                (resume_id, name, title, email, phone, location, summary, skills, experience, education, template, now)
+            )
+
+        return self.protected_write(
+            origin_node_id=origin_node_id,
+            origin_epoch=origin_epoch,
+            entity_type="resume",
+            entity_id=resume_id,
+            operation="upsert",
+            payload=payload,
+            execute_data_change=_do_upsert,
+            is_primary=is_primary,
+            op_id=uuid.uuid4().hex,
+            cluster_id=cluster_id,
+            secret=secret
+        )
 
     # --- Ownership & Lease Operations ---
     def set_ownership(self, record: OwnershipRecord):
@@ -668,6 +809,18 @@ class PhoneDatabase:
                     {"id": r["id"], "name": r["name"], "email": r["email"], "subject": r["subject"], "message": r["message"]}
                     for r in cur.fetchall()
                 ]
+            elif table_name == "portfolio_resume":
+                cur.execute(
+                    """
+                    SELECT id, name, title, email, phone, location, summary, skills, experience, education, template
+                    FROM portfolio_resume
+                    ORDER BY id ASC
+                    """
+                )
+                rows = [
+                    {"id": r["id"], "name": r["name"], "title": r["title"], "email": r["email"], "phone": r["phone"], "location": r["location"], "summary": r["summary"], "skills": r["skills"], "experience": r["experience"], "education": r["education"], "template": r["template"]}
+                    for r in cur.fetchall()
+                ]
             elif table_name == "change_log":
                 cur.execute(
                     """
@@ -996,6 +1149,57 @@ class PhoneDatabase:
                                 payload.get("updated_at", now)
                             )
                         )
+                elif entity_type == "resume":
+                    cur.execute("SELECT * FROM portfolio_resume WHERE id = ?", (entity_id,))
+                    local_row = cur.fetchone()
+                    remote_epoch = ev.get("origin_epoch", 1)
+                    if local_row:
+                        local_dict = dict(local_row)
+                        if (local_dict.get("updated_at", 0) > payload.get("updated_at", 0)) and remote_epoch <= 1:
+                            conflict_id = uuid.uuid4().hex
+                            cur.execute(
+                                """
+                                INSERT INTO conflict_records (conflict_id, entity_type, entity_id, origin_node_id, local_data, remote_data, detected_at, resolved)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+                                """,
+                                (conflict_id, entity_type, entity_id, origin_node_id, json.dumps(local_dict), json.dumps(payload), now)
+                            )
+
+                    if operation == "upsert":
+                        cur.execute(
+                            """
+                            INSERT INTO portfolio_resume (id, name, title, email, phone, location, summary, skills, experience, education, template, updated_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(id) DO UPDATE SET
+                                name = excluded.name,
+                                title = excluded.title,
+                                email = excluded.email,
+                                phone = excluded.phone,
+                                location = excluded.location,
+                                summary = excluded.summary,
+                                skills = excluded.skills,
+                                experience = excluded.experience,
+                                education = excluded.education,
+                                template = excluded.template,
+                                updated_at = excluded.updated_at
+                            """,
+                            (
+                                payload.get("id", entity_id),
+                                payload.get("name", ""),
+                                payload.get("title", ""),
+                                payload.get("email", ""),
+                                payload.get("phone", ""),
+                                payload.get("location", ""),
+                                payload.get("summary", ""),
+                                payload.get("skills", ""),
+                                payload.get("experience", ""),
+                                payload.get("education", ""),
+                                payload.get("template", "modern"),
+                                payload.get("updated_at", now)
+                            )
+                        )
+                    elif operation == "delete":
+                        cur.execute("DELETE FROM portfolio_resume WHERE id = ?", (entity_id,))
                 else:
                     raise ValueError(f"Unsupported entity_type for replication: {entity_type}")
 
@@ -1036,5 +1240,189 @@ class PhoneDatabase:
         except Exception as e:
             conn.rollback()
             return False, last_applied_seq, 0, [], False, f"Replication transaction failed: {str(e)}"
+        finally:
+            conn.close()
+
+    # --- Durable Alert Outbox Operations (Phase 11b) ---
+
+    def enqueue_alert(
+        self,
+        dedupe_key: str,
+        severity: str,
+        title: str,
+        body: str,
+        cooldown_seconds: float = 300.0,
+        now: Optional[float] = None
+    ) -> Optional[str]:
+        """
+        Durably enqueues an alert into alert_outbox.
+        Enforces cooldown on duplicate dedupe_key to prevent flapping.
+        Returns alert_id if enqueued, or None if suppressed by cooldown.
+        """
+        cur_time = now if now is not None else time.time()
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            # Cooldown check
+            if cooldown_seconds > 0:
+                cur.execute(
+                    "SELECT created_at FROM alert_outbox WHERE dedupe_key = ? ORDER BY created_at DESC LIMIT 1",
+                    (dedupe_key,)
+                )
+                row = cur.fetchone()
+                if row and (cur_time - row["created_at"]) < cooldown_seconds:
+                    return None
+
+            alert_id = uuid.uuid4().hex
+            cur.execute(
+                """
+                INSERT INTO alert_outbox (id, dedupe_key, severity, title, body, created_at, sent_at, attempts, next_attempt_at)
+                VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?)
+                """,
+                (alert_id, dedupe_key, severity, title, body, cur_time, cur_time)
+            )
+            conn.commit()
+            return alert_id
+        finally:
+            conn.close()
+
+    def get_pending_alerts(self, limit: int = 10, now: Optional[float] = None) -> List[Dict[str, Any]]:
+        """Fetch pending alerts ready for delivery."""
+        cur_time = now if now is not None else time.time()
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, dedupe_key, severity, title, body, created_at, attempts, next_attempt_at
+                FROM alert_outbox
+                WHERE sent_at IS NULL AND next_attempt_at <= ?
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (cur_time, limit)
+            )
+            return [dict(row) for row in cur.fetchall()]
+        finally:
+            conn.close()
+
+    def mark_alert_sent(self, alert_id: str, sent_at: Optional[float] = None) -> None:
+        """Mark an alert as successfully delivered."""
+        cur_time = sent_at if sent_at is not None else time.time()
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("UPDATE alert_outbox SET sent_at = ? WHERE id = ?", (cur_time, alert_id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def record_alert_attempt(self, alert_id: str, next_attempt_at: float, current_attempts: int) -> None:
+        """Record retry attempt and set next backoff timestamp."""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE alert_outbox SET attempts = ?, next_attempt_at = ? WHERE id = ?",
+                (current_attempts, next_attempt_at, alert_id)
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_alert_send_counts(self, since_timestamp: float) -> int:
+        """Count number of alerts sent since a timestamp (for hourly/daily rate caps)."""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) as cnt FROM alert_outbox WHERE sent_at >= ?", (since_timestamp,))
+            row = cur.fetchone()
+            return int(row["cnt"]) if row else 0
+        finally:
+            conn.close()
+
+    def prune_alert_outbox(self, max_rows: int = 1000, keep_seconds: float = 86400 * 7) -> int:
+        """Prune old sent alerts to keep table size bounded."""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cutoff = time.time() - keep_seconds
+            cur.execute("DELETE FROM alert_outbox WHERE sent_at IS NOT NULL AND sent_at < ?", (cutoff,))
+            pruned = cur.rowcount
+            conn.commit()
+            return pruned
+        finally:
+            conn.close()
+
+    # --- Incident Tracker Operations (Phase 11b) ---
+
+    def create_or_update_incident(self, incident_data: Dict[str, Any]) -> None:
+        """Upsert incident tracking record."""
+        now = time.time()
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            inc_id = incident_data["incident_id"]
+            cur.execute("SELECT incident_id FROM incidents WHERE incident_id = ?", (inc_id,))
+            exists = cur.fetchone() is not None
+
+            if exists:
+                fields = []
+                values = []
+                for k, v in incident_data.items():
+                    if k != "incident_id":
+                        fields.append(f"{k} = ?")
+                        values.append(v)
+                fields.append("updated_at = ?")
+                values.append(now)
+                values.append(inc_id)
+                upd_query = f"UPDATE incidents SET {', '.join(fields)} WHERE incident_id = ?"
+                cur.execute(upd_query, values)
+            else:
+                cols = list(incident_data.keys())
+                vals = list(incident_data.values())
+                if "created_at" not in incident_data:
+                    cols.append("created_at")
+                    vals.append(now)
+                if "updated_at" not in incident_data:
+                    cols.append("updated_at")
+                    vals.append(now)
+                placeholders = ", ".join(["?"] * len(cols))
+                ins_query = f"INSERT INTO incidents ({', '.join(cols)}) VALUES ({placeholders})"
+                cur.execute(ins_query, vals)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_incident(self, incident_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve an incident record by ID."""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM incidents WHERE incident_id = ?", (incident_id,))
+            row = cur.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def get_active_incident(self) -> Optional[Dict[str, Any]]:
+        """Retrieve current OPEN incident, if any."""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM incidents WHERE status = 'OPEN' ORDER BY created_at DESC LIMIT 1")
+            row = cur.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+
+    def count_writes_since(self, since_timestamp: float) -> int:
+        """Count operations accepted in change_log since a timestamp."""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) as cnt FROM change_log WHERE created_at >= ?", (since_timestamp,))
+            row = cur.fetchone()
+            return int(row["cnt"]) if row else 0
         finally:
             conn.close()

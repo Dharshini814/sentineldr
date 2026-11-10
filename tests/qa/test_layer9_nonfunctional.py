@@ -30,7 +30,7 @@ from shared.logger import setup_logger, redact_sensitive_data, StructuredJsonFor
 CLUSTER_ID = "sentineldr-cluster-01"
 SHARED_SECRET = "qa-shared-secret-key-67890"
 
-def test_layer9_nonfunctional():
+def run_layer9_nonfunctional():
     print("=== LAYER 9 NON-FUNCTIONAL, LOGGING, BURST & CONCURRENCY AUDIT ===")
     results = []
 
@@ -135,5 +135,12 @@ def test_layer9_nonfunctional():
     phone_srv.stop()
     return results
 
+
+def test_layer9_nonfunctional():
+    results = run_layer9_nonfunctional()
+    failures = [r for r in results if r[2] != "PASS"]
+    assert not failures, f"Layer 9 failures: {failures}"
+
+
 if __name__ == "__main__":
-    test_layer9_nonfunctional()
+    run_layer9_nonfunctional()

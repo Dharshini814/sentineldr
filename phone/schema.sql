@@ -93,6 +93,21 @@ CREATE TABLE IF NOT EXISTS portfolio_contact (
     updated_at REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS portfolio_resume (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    location TEXT,
+    summary TEXT NOT NULL,
+    skills TEXT NOT NULL,
+    experience TEXT NOT NULL,
+    education TEXT NOT NULL,
+    template TEXT NOT NULL DEFAULT 'modern',
+    updated_at REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS conflict_records (
     conflict_id TEXT PRIMARY KEY,
     entity_type TEXT NOT NULL,
@@ -142,4 +157,40 @@ CREATE TABLE IF NOT EXISTS portfolio_inquiries (
     subject TEXT,
     message TEXT NOT NULL,
     created_at REAL NOT NULL
+);
+
+-- Durable Alert Outbox for asynchronous, retryable email delivery
+CREATE TABLE IF NOT EXISTS alert_outbox (
+    id TEXT PRIMARY KEY,
+    dedupe_key TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    sent_at REAL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_outbox_pending ON alert_outbox(sent_at, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_alert_outbox_dedupe ON alert_outbox(dedupe_key, created_at);
+
+-- Incident Tracker Table for end-to-end failover & recovery analytics
+CREATE TABLE IF NOT EXISTS incidents (
+    incident_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    last_good_heartbeat_at REAL,
+    suspected_at REAL,
+    promotion_started_at REAL,
+    phone_node_active_at REAL,
+    writes_accepted_during_outage INTEGER NOT NULL DEFAULT 0,
+    laptop_node_first_seen_back_at REAL,
+    recovery_started_at REAL,
+    replay_complete_at REAL,
+    events_replayed_count INTEGER NOT NULL DEFAULT 0,
+    failback_completed_at REAL,
+    conflict_count INTEGER NOT NULL DEFAULT 0,
+    integrity_result TEXT,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
 );

@@ -15,25 +15,25 @@ if BASE_DIR not in sys.path:
 from tests.qa.test_layer0_preflight import run_layer0_preflight
 from tests.qa.test_layer1_static import run_layer1_static
 from tests.qa.test_layer2_api import run_layer2_tests
-from tests.qa.test_layer3_database import test_layer3_database
-from tests.qa.test_layer4_replication import test_layer4_replication
-from tests.qa.test_layer5_ownership import test_layer5_ownership
-from tests.qa.test_layer6_lifecycle import test_layer6_lifecycle
-from tests.qa.test_layer7_portfolio_dashboard import test_layer7_portfolio_dashboard
-from tests.qa.test_layer8_edge_routing import test_layer8_edge_routing
-from tests.qa.test_layer9_nonfunctional import test_layer9_nonfunctional
+from tests.qa.test_layer3_database import run_layer3_database
+from tests.qa.test_layer4_replication import run_layer4_replication
+from tests.qa.test_layer5_ownership import run_layer5_ownership
+from tests.qa.test_layer6_lifecycle import run_layer6_lifecycle
+from tests.qa.test_layer7_portfolio_dashboard import run_layer7_portfolio_dashboard
+from tests.qa.test_layer8_edge_routing import run_layer8_edge_routing
+from tests.qa.test_layer9_nonfunctional import run_layer9_nonfunctional
 
 LAYERS = [
     ("Layer 0: Preflight", run_layer0_preflight),
     ("Layer 1: Static Code", run_layer1_static),
     ("Layer 2: API Endpoints", run_layer2_tests),
-    ("Layer 3: Database", test_layer3_database),
-    ("Layer 4: Replication", test_layer4_replication),
-    ("Layer 5: Ownership & Leases", test_layer5_ownership),
-    ("Layer 6: Lifecycle & Failover", test_layer6_lifecycle),
-    ("Layer 7: Portfolio & Dashboard", test_layer7_portfolio_dashboard),
-    ("Layer 8: Edge Routing", test_layer8_edge_routing),
-    ("Layer 9: Non-Functional & Load", test_layer9_nonfunctional),
+    ("Layer 3: Database", run_layer3_database),
+    ("Layer 4: Replication", run_layer4_replication),
+    ("Layer 5: Ownership & Leases", run_layer5_ownership),
+    ("Layer 6: Lifecycle & Failover", run_layer6_lifecycle),
+    ("Layer 7: Portfolio & Dashboard", run_layer7_portfolio_dashboard),
+    ("Layer 8: Edge Routing", run_layer8_edge_routing),
+    ("Layer 9: Non-Functional & Load", run_layer9_nonfunctional),
 ]
 
 def run_suite_once(run_number: int):

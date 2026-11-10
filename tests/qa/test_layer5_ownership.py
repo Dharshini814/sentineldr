@@ -40,7 +40,7 @@ CLUSTER_ID = "sentineldr-cluster-01"
 WITNESS_SECRET = "qa-witness-secret-key-12345"
 SHARED_SECRET = "qa-shared-secret-key-67890"
 
-def test_layer5_ownership():
+def run_layer5_ownership():
     print("=== LAYER 5 OWNERSHIP, LEASE, FENCING & PARTITIONS AUDIT ===")
     results = []
 
@@ -190,5 +190,12 @@ def test_layer5_ownership():
 
     return results
 
+
+def test_layer5_ownership():
+    results = run_layer5_ownership()
+    failures = [r for r in results if r[2] != "PASS"]
+    assert not failures, f"Layer 5 failures: {failures}"
+
+
 if __name__ == "__main__":
-    test_layer5_ownership()
+    run_layer5_ownership()

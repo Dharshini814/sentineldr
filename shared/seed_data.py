@@ -107,3 +107,18 @@ CONTACT_SEED = {
     "linkedin": "linkedin.com/in/yourprofile",
     "github": "github.com/yourusername",
 }
+
+RESUME_SEED = {
+    "id": "default_resume",
+    "name": "Dr. Dharshini",
+    "title": "Senior Distributed Systems & Resilience Architect",
+    "email": "dharshini.resilience@sentineldr.dev",
+    "phone": "+1 (555) 019-2834",
+    "location": "San Francisco, CA & Remote",
+    "summary": "Accomplished Distributed Systems Architect specializing in zero-data-loss failover architectures, cross-tier transaction outbox replication, and hardware-constrained edge recovery nodes. Proven leader in designing sub-second disaster recovery failover systems.",
+    "skills": "Active-Standby Clustering, Transactional Outbox, SQLite WAL Mode, PostgreSQL 16, Monotonic Replication, Split-Brain Fencing, Python 3.13, Network Partition Recovery",
+    "experience": "• Principal Resilience Architect — SentinelDR Core (2024 - Present)\nArchitected cross-tier disaster recovery failover coordinator between primary laptop and edge smartphone standby. Enforced zero-gap outbox replication with cryptographic epoch leasing.\n\n• Senior Distributed Systems Engineer — CloudResilience Inc (2021 - 2024)\nEngineered high-throughput replication pipelines handling >25k transactions/sec with sub-millisecond WAL commits.",
+    "education": "• M.S. Distributed Systems & High Availability — Stanford University (2021)\n• B.S. Computer Science & Software Engineering — UC Berkeley (2019)",
+    "template": "modern",
+}
+

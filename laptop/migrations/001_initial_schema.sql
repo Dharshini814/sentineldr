@@ -93,6 +93,21 @@ CREATE TABLE IF NOT EXISTS portfolio_contact (
     updated_at DOUBLE PRECISION NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS portfolio_resume (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(256) NOT NULL,
+    title VARCHAR(256) NOT NULL,
+    email VARCHAR(256) NOT NULL,
+    phone VARCHAR(64) NOT NULL,
+    location VARCHAR(256),
+    summary TEXT NOT NULL,
+    skills TEXT NOT NULL,
+    experience TEXT NOT NULL,
+    education TEXT NOT NULL,
+    template VARCHAR(64) NOT NULL DEFAULT 'modern',
+    updated_at DOUBLE PRECISION NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS conflict_records (
     conflict_id UUID PRIMARY KEY,
     entity_type VARCHAR(64) NOT NULL,
@@ -142,4 +157,40 @@ CREATE TABLE IF NOT EXISTS portfolio_inquiries (
     subject TEXT,
     message TEXT NOT NULL,
     created_at DOUBLE PRECISION NOT NULL
+);
+
+-- Durable Alert Outbox for asynchronous, retryable email delivery
+CREATE TABLE IF NOT EXISTS alert_outbox (
+    id VARCHAR(64) PRIMARY KEY,
+    dedupe_key VARCHAR(128) NOT NULL,
+    severity VARCHAR(16) NOT NULL,
+    title VARCHAR(256) NOT NULL,
+    body TEXT NOT NULL,
+    created_at DOUBLE PRECISION NOT NULL,
+    sent_at DOUBLE PRECISION,
+    attempts INT NOT NULL DEFAULT 0,
+    next_attempt_at DOUBLE PRECISION NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_alert_outbox_pending ON alert_outbox(sent_at, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_alert_outbox_dedupe ON alert_outbox(dedupe_key, created_at);
+
+-- Incident Tracker Table for end-to-end failover & recovery analytics
+CREATE TABLE IF NOT EXISTS incidents (
+    incident_id VARCHAR(64) PRIMARY KEY,
+    status VARCHAR(32) NOT NULL,
+    last_good_heartbeat_at DOUBLE PRECISION,
+    suspected_at DOUBLE PRECISION,
+    promotion_started_at DOUBLE PRECISION,
+    phone_node_active_at DOUBLE PRECISION,
+    writes_accepted_during_outage INT NOT NULL DEFAULT 0,
+    laptop_node_first_seen_back_at DOUBLE PRECISION,
+    recovery_started_at DOUBLE PRECISION,
+    replay_complete_at DOUBLE PRECISION,
+    events_replayed_count INT NOT NULL DEFAULT 0,
+    failback_completed_at DOUBLE PRECISION,
+    conflict_count INT NOT NULL DEFAULT 0,
+    integrity_result TEXT,
+    created_at DOUBLE PRECISION NOT NULL,
+    updated_at DOUBLE PRECISION NOT NULL
 );

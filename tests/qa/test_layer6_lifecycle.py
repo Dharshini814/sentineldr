@@ -46,7 +46,7 @@ CLUSTER_ID = "sentineldr-cluster-01"
 WITNESS_SECRET = "qa-witness-secret-key-12345"
 SHARED_SECRET = "qa-shared-secret-key-67890"
 
-def test_layer6_lifecycle():
+def run_layer6_lifecycle():
     print("=== LAYER 6 LIFECYCLE, FAILOVER & RECOVERY AUDIT ===")
     results = []
 
@@ -189,5 +189,12 @@ def test_layer6_lifecycle():
 
     return results
 
+
+def test_layer6_lifecycle():
+    results = run_layer6_lifecycle()
+    failures = [r for r in results if r[2] != "PASS"]
+    assert not failures, f"Layer 6 failures: {failures}"
+
+
 if __name__ == "__main__":
-    test_layer6_lifecycle()
+    run_layer6_lifecycle()

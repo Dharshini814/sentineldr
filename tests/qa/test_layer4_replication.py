@@ -26,7 +26,7 @@ from phone.db import PhoneDatabase
 from shared.replication import MAX_BATCH_SIZE, validate_batch_request
 from shared.replication_worker import ReplicationClient
 
-def test_layer4_replication():
+def run_layer4_replication():
     print("=== LAYER 4 REPLICATION AUDIT ===")
     results = []
 
@@ -142,5 +142,12 @@ def test_layer4_replication():
 
     return results
 
+
+def test_layer4_replication():
+    results = run_layer4_replication()
+    failures = [r for r in results if r[2] != "PASS"]
+    assert not failures, f"Layer 4 failures: {failures}"
+
+
 if __name__ == "__main__":
-    test_layer4_replication()
+    run_layer4_replication()

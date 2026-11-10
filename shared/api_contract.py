@@ -47,6 +47,7 @@ ROUTE_PEER_CHANGES = "/api/v1/peer/changes"
 ROUTE_DASHBOARD_STATUS = "/api/v1/dashboard/status"
 ROUTE_DASHBOARD_EVENTS = "/api/v1/dashboard/events"
 ROUTE_ACTIVE_ORIGIN = "/api/v1/active-origin"
+ROUTE_PORTFOLIO_RESUME = "/api/v1/portfolio/resume"
 
 # Approved Frontend Origins for Restricted CORS (No Wildcard with Credentials)
 ALLOWED_ORIGINS = {

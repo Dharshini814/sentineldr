@@ -286,3 +286,218 @@ def test_unsupported_websocket_rejected(laptop_client, phone_server_url):
     st_ph, body_ph, _ = phone_request(url, "/ws")
     assert st_ph == 400
     assert body_ph["error"]["code"] == "FEATURE_UNSUPPORTED_DURING_FAILOVER"
+
+
+# 5. Resume Builder & Cross-Node Synchronization Tests
+def test_resume_data_parity(laptop_client, phone_server_url):
+    url, _, _ = phone_server_url
+    from shared.seed_data import RESUME_SEED
+    from laptop.server import db as laptop_db, state_machine
+    
+    # Ensure baseline seed state on laptop
+    laptop_db.save_resume(
+        origin_node_id="laptop",
+        origin_epoch=state_machine.current_epoch,
+        name=RESUME_SEED["name"],
+        title=RESUME_SEED["title"],
+        email=RESUME_SEED["email"],
+        phone=RESUME_SEED["phone"],
+        location=RESUME_SEED["location"],
+        summary=RESUME_SEED["summary"],
+        skills=RESUME_SEED["skills"],
+        experience=RESUME_SEED["experience"],
+        education=RESUME_SEED["education"],
+        template=RESUME_SEED["template"],
+        is_primary=True
+    )
+
+    resp_lp = laptop_client.get("/api/v1/portfolio/resume").json()
+    st_ph, resp_ph, _ = phone_request(url, "/api/v1/portfolio/resume")
+
+    assert resp_lp["ok"] is True
+    assert st_ph == 200
+    assert resp_ph["ok"] is True
+    lp_data = resp_lp["data"]
+    ph_data = resp_ph["data"]
+
+    assert lp_data["name"] == ph_data["name"]
+    assert lp_data["title"] == ph_data["title"]
+    assert lp_data["email"] == ph_data["email"]
+    assert lp_data["phone"] == ph_data["phone"]
+    assert lp_data["location"] == ph_data["location"]
+    assert lp_data["summary"] == ph_data["summary"]
+    assert lp_data["skills"] == ph_data["skills"]
+    assert lp_data["template"] == ph_data["template"]
+
+
+def test_laptop_resume_write_and_replication_to_phone(laptop_client, phone_server_url):
+    from laptop.server import db as laptop_db, config, state_machine
+    from shared.ownership import sign_ownership_record
+
+    now = time.time()
+    state_machine._state = "PRIMARY_ACTIVE"
+    sig = sign_ownership_record(config.cluster_id, "laptop", state_machine.current_epoch, "lease-resume-test", now + 60.0, "witness", laptop_db.witness_secret)
+    laptop_db.set_ownership(type("Record", (), {
+        "cluster_id": config.cluster_id,
+        "owner_node_id": "laptop",
+        "epoch": state_machine.current_epoch,
+        "lease_id": "lease-resume-test",
+        "lease_expires_at": now + 60.0,
+        "granted_by": "witness",
+        "signature": sig
+    })())
+
+    updated_resume = {
+        "name": "Dr. Dharshini Updated",
+        "title": "Principal Distributed Systems Architect",
+        "email": "dharshini.updated@sentineldr.dev",
+        "phone": "+1 (555) 999-0000",
+        "location": "Boston, MA",
+        "summary": "Updated executive summary for disaster recovery test.",
+        "skills": "Failover, Replication, SQLite WAL, PostgreSQL",
+        "experience": "Lead Architect for SentinelDR Project.",
+        "education": "Ph.D. in Computer Science",
+        "template": "security"
+    }
+
+    # 1. POST to Laptop
+    resp = laptop_client.post("/api/v1/portfolio/resume", json=updated_resume)
+    assert resp.status_code == 200
+    res_json = resp.json()
+    assert res_json["ok"] is True
+    op_id = res_json["data"]["operation_id"]
+
+    # Verify Laptop db was updated
+    lp_resume = laptop_client.get("/api/v1/portfolio/resume").json()["data"]
+    assert lp_resume["name"] == "Dr. Dharshini Updated"
+    assert lp_resume["title"] == "Principal Distributed Systems Architect"
+
+    # 2. Replicate change_log events to Phone node
+    url, phone_config, phone_server = phone_server_url
+    checkpoint = phone_server.db.get_replication_checkpoint("laptop")
+    last_seq = checkpoint["last_applied_sequence"]
+    events_to_sync = laptop_db.get_pending_replication_events("laptop", from_sequence=last_seq + 1, limit=500)
+
+    ok, applied_seq, dup_count, missing, has_gap, err = phone_server.db.apply_replication_batch(
+        origin_node_id="laptop",
+        batch_id="batch-resume-sync-1",
+        events=events_to_sync
+    )
+    assert ok is True
+
+    # 3. Verify Phone db now reflects the exact same resume
+    st_ph, resp_ph, _ = phone_request(url, "/api/v1/portfolio/resume")
+    assert st_ph == 200
+    ph_data = resp_ph["data"]
+    assert ph_data["name"] == "Dr. Dharshini Updated"
+    assert ph_data["title"] == "Principal Distributed Systems Architect"
+    assert ph_data["email"] == "dharshini.updated@sentineldr.dev"
+    assert ph_data["summary"] == "Updated executive summary for disaster recovery test."
+
+
+def test_phone_resume_write_during_failover_and_replay_to_laptop(laptop_client, phone_server_url):
+    url, phone_config, phone_server = phone_server_url
+    from laptop.server import db as laptop_db
+    from shared.ownership import sign_ownership_record
+
+    # Reset laptop checkpoint for phone to align with fresh ephemeral phone test fixture
+    import sqlite3
+    conn = sqlite3.connect(laptop_db._sqlite_path)
+    conn.execute("DELETE FROM replication_checkpoint WHERE peer_node_id = 'phone'")
+    conn.commit()
+    conn.close()
+
+    # 1. Promote Phone node to active primary
+    now = time.time()
+    phone_server.state_machine._state = "PRIMARY_ACTIVE"
+    phone_server.state_machine.set_epoch(2)
+    phone_sig = sign_ownership_record(phone_config.cluster_id, "phone", 2, "lease-phone-promoted", now + 60.0, "witness", phone_server.db.witness_secret)
+    phone_server.db.set_ownership(type("Record", (), {
+        "cluster_id": phone_config.cluster_id,
+        "owner_node_id": "phone",
+        "epoch": 2,
+        "lease_id": "lease-phone-promoted",
+        "lease_expires_at": now + 60.0,
+        "granted_by": "witness",
+        "signature": phone_sig
+    })())
+
+    failover_resume = {
+        "name": "Dr. Dharshini (Phone DR Active)",
+        "title": "Disaster Recovery Commander",
+        "email": "dharshini.dr@sentineldr.dev",
+        "phone": "+1 (555) 888-1111",
+        "location": "Failover Edge Node",
+        "summary": "Resume edited on Phone Node during primary outage.",
+        "skills": "Termux, Standard Library, Outbox Replay",
+        "experience": "Successfully commanded failover during outage.",
+        "education": "High Availability Systems Architecture",
+        "template": "minimal"
+    }
+
+    # 2. Write to Phone node
+    status, body, _ = phone_request(url, "/api/v1/portfolio/resume", method="POST", data=failover_resume)
+    assert status == 200
+    assert body["ok"] is True
+    op_id = body["data"]["operation_id"]
+
+    # Phone reflects edit
+    _, ph_get, _ = phone_request(url, "/api/v1/portfolio/resume")
+    assert ph_get["data"]["name"] == "Dr. Dharshini (Phone DR Active)"
+
+    # 3. Simulate recovery replay to Laptop node
+    phone_events = phone_server.db.get_pending_replication_events("phone", 1, 50)
+    dr_events = [e for e in phone_events if e["operation_id"] == op_id]
+    assert len(dr_events) == 1
+
+    ok, applied_seq, dup_count, missing, has_gap, err = laptop_db.apply_replication_batch(
+        origin_node_id="phone",
+        batch_id="batch-phone-to-laptop-1",
+        events=dr_events
+    )
+    assert ok is True
+
+    # Laptop reflects the resume edited on phone!
+    lp_get = laptop_client.get("/api/v1/portfolio/resume").json()
+    assert lp_get["data"]["name"] == "Dr. Dharshini (Phone DR Active)"
+    assert lp_get["data"]["title"] == "Disaster Recovery Commander"
+
+    # Clean up and restore baseline seed state
+    from shared.seed_data import RESUME_SEED
+    laptop_db.save_resume(
+        origin_node_id="laptop",
+        origin_epoch=1,
+        name=RESUME_SEED["name"],
+        title=RESUME_SEED["title"],
+        email=RESUME_SEED["email"],
+        phone=RESUME_SEED["phone"],
+        location=RESUME_SEED["location"],
+        summary=RESUME_SEED["summary"],
+        skills=RESUME_SEED["skills"],
+        experience=RESUME_SEED["experience"],
+        education=RESUME_SEED["education"],
+        template=RESUME_SEED["template"],
+        is_primary=True
+    )
+
+
+def test_standby_phone_rejects_resume_write(phone_server_url):
+    url, phone_config, phone_server = phone_server_url
+    phone_server.state_machine._state = "SECONDARY_STANDBY"
+
+    payload = {
+        "name": "Intruder Edit",
+        "title": "Unauthorized Writer",
+        "email": "intruder@fail.org",
+        "phone": "000",
+        "location": "Void",
+        "summary": "Should be rejected",
+        "skills": "None",
+        "experience": "None",
+        "education": "None",
+        "template": "modern"
+    }
+    status, body, _ = phone_request(url, "/api/v1/portfolio/resume", method="POST", data=payload)
+    assert status == 403
+    assert body["ok"] is False
+    assert body["error"]["code"] == "FORBIDDEN"

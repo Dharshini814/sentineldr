@@ -88,6 +88,18 @@ class NodeConfig:
             os.path.join(os.getcwd(), f"{self.node_id}_nonce_cache.db")
         )
 
+        # Alert & SMTP Configuration
+        self.alert_channel: str = os.getenv("SDR_ALERT_CHANNEL", "email")
+        self.smtp_host: str = os.getenv("SDR_SMTP_HOST", "smtp.gmail.com")
+        raw_port = os.getenv("SDR_SMTP_PORT", "465")
+        try:
+            self.smtp_port: int = int(raw_port)
+        except (ValueError, TypeError):
+            self.smtp_port = 465
+        self.smtp_user: str = os.getenv("SDR_SMTP_USER", "")
+        self.smtp_password: str = os.getenv("SDR_SMTP_APP_PASSWORD", "")
+        self.admin_alert_email: str = os.getenv("SDR_ADMIN_ALERT_EMAIL", "")
+
     def to_dict(self) -> dict:
         """Return safe configuration dictionary with secrets redacted."""
         return {
@@ -101,6 +113,8 @@ class NodeConfig:
             "peer_url": self.peer_url,
             "timestamp_window_seconds": self.timestamp_window_seconds,
             "secrets_configured": bool(self.hmac_secret and self.admin_key),
+            "smtp_configured": bool(self.smtp_user and self.smtp_password and self.admin_alert_email),
             "hmac_secret": "***REDACTED***",
             "admin_key": "***REDACTED***",
+            "smtp_password": "***REDACTED***" if self.smtp_password else "",
         }

@@ -79,6 +79,14 @@ from shared.security import (
 from shared.state_machine import ClusterStateMachine
 from shared.replication_worker import ReplicationClient
 from shared.discovery import PeerDiscoveryListener
+from shared.alerts import (
+    AlertOutboxWorker,
+    EmailAlertDispatcher,
+    enqueue_alert,
+    SEVERITY_INFO,
+    SEVERITY_WARNING,
+    SEVERITY_CRITICAL,
+)
 import threading
 
 
@@ -156,58 +164,136 @@ discovery.add_on_discovered_callback(_on_peer_found)
 if "pytest" not in sys.modules and os.environ.get("SDR_TESTING") != "1":
     discovery.start()
 
+def push_unreplicated_to_phone():
+    """Pushes any pending local change_log entries to the standby Phone node."""
+    target_url = getattr(discovery, "phone_url", config.peer_url) or config.peer_url
+    try:
+        unrep = db.get_unreplicated_changes(peer_node_id="phone", limit=50)
+        if not unrep:
+            return
+        from_seq = unrep[0]["sequence_number"]
+        batch_id = f"batch-laptop-{uuid.uuid4().hex[:8]}"
+        repl_ok, resp_data, err = repl_client.replicate_batch(
+            peer_url=target_url,
+            sender_node_id=config.node_id,
+            epoch=state_machine.current_epoch,
+            batch_id=batch_id,
+            from_sequence=from_seq,
+            events=unrep,
+            max_retries=2
+        )
+        if repl_ok and resp_data:
+            applied = resp_data.get("last_applied_sequence", unrep[-1]["sequence_number"])
+            last_op = unrep[-1].get("operation_id")
+            db.record_peer_ack("phone", applied, last_op)
+        elif not repl_ok and err and "Sequence gap detected" in err:
+            # Self-healing loop: peer is missing earlier events; re-send from sequence 1 until fully caught up
+            curr_from = 1
+            while True:
+                unrep_all = db.get_pending_replication_events(origin_node_id=config.node_id, from_sequence=curr_from, limit=50)
+                if not unrep_all:
+                    break
+                batch_id_gap = f"batch-laptop-gap-{uuid.uuid4().hex[:8]}"
+                ok_gap, resp_gap, _ = repl_client.replicate_batch(
+                    peer_url=target_url,
+                    sender_node_id=config.node_id,
+                    epoch=state_machine.current_epoch,
+                    batch_id=batch_id_gap,
+                    from_sequence=curr_from,
+                    events=unrep_all,
+                    max_retries=1
+                )
+                if ok_gap and resp_gap:
+                    applied = resp_gap.get("last_applied_sequence", unrep_all[-1]["sequence_number"])
+                    last_op = unrep_all[-1].get("operation_id")
+                    db.record_peer_ack("phone", applied, last_op)
+                    if applied >= unrep_all[-1]["sequence_number"]:
+                        curr_from = applied + 1
+                    else:
+                        break
+                else:
+                    break
+    except Exception as e:
+        print(f"[Laptop Replication] Exception in push: {e}", flush=True)
+
+
 def _laptop_background_worker():
-    """Periodically sends heartbeats every 3 seconds to Phone and handles auto-failback."""
+    """Periodically sends heartbeats every 2.5 seconds to Phone, replicates outbox, and handles auto-failback."""
     while True:
-        time.sleep(3.0)
+        time.sleep(2.5)
         try:
-            # 1. Heartbeat to Phone when Laptop is PRIMARY_ACTIVE
+            target_phone_url = getattr(discovery, "phone_url", config.peer_url) or config.peer_url
+            # 1. Check if Phone took over while Laptop was offline, and run automatic recovery/failback
+            try:
+                ok, _, peer_data, _ = recovery_coordinator._send_peer_request(target_phone_url, "GET", ROUTE_STATUS)
+                if ok and peer_data and peer_data.get("ok"):
+                    role = peer_data.get("data", {}).get("role")
+                    peer_node = peer_data.get("data", {}).get("node_id")
+                    if role in (STATE_SECONDARY_ACTIVE, STATE_PRIMARY_ACTIVE) and peer_node == "phone":
+                        print("[Laptop Node] Detected Phone is currently active. Initiating automatic recovery & failback...", flush=True)
+                        rec_ok, rec_msg, _ = recovery_coordinator.start_recovery(target_phone_url)
+                        if rec_ok:
+                            recovery_coordinator.reconcile_from_peer(target_phone_url)
+                            val_ok, _, _ = recovery_coordinator.validate_integrity_before_failback(target_phone_url)
+                            if val_ok:
+                                fb_ok, fb_msg, _ = recovery_coordinator.initiate_failback(target_phone_url)
+                                if fb_ok:
+                                    print("[Laptop Node] Failback completed! Laptop resumed PRIMARY_ACTIVE.", flush=True)
+            except Exception:
+                pass
+
+            # 2. If Laptop is PRIMARY_ACTIVE, send heartbeat and replicate pending outbox changes
             if state_machine.current_state == STATE_PRIMARY_ACTIVE:
+                push_unreplicated_to_phone()
                 ownership = db.get_ownership(config.cluster_id)
                 lease_id = ownership.lease_id if ownership else "laptop-lease"
                 chk = db.get_replication_checkpoint(config.node_id)
                 last_seq = chk.get("last_applied_sequence", 0) if chk else 0
                 repl_client.send_heartbeat(
-                    peer_url=config.peer_url,
+                    peer_url=target_phone_url,
                     sender_node_id=config.node_id,
                     sender_state=state_machine.current_state,
                     epoch=state_machine.current_epoch,
                     lease_id=lease_id,
+                    last_applied_sequence=last_seq,
                     last_committed_sequence=last_seq,
-                    database_health="HEALTHY"
+                    database_health="HEALTHY",
+                    max_retries=1
                 )
-
-            # 2. Check if Phone was promoted during downtime and trigger recovery/failback
-            elif state_machine.current_state in (STATE_RECOVERING, STATE_SECONDARY_STANDBY):
-                ok, _, peer_data, _ = recovery_coordinator._send_peer_request(config.peer_url, "GET", ROUTE_STATUS)
-                if ok and peer_data and peer_data.get("ok"):
-                    role = peer_data.get("data", {}).get("role")
-                    if role == STATE_SECONDARY_ACTIVE:
-                        print("[Laptop Node] Detected Phone is currently SECONDARY_ACTIVE. Initiating automatic recovery & failback...", flush=True)
-                        rec_ok, rec_msg, _ = recovery_coordinator.start_recovery(config.peer_url)
-                        if rec_ok:
-                            recovery_coordinator.reconcile_from_peer(config.peer_url)
-                            val_ok, _, _ = recovery_coordinator.validate_integrity_before_failback(config.peer_url)
-                            if val_ok:
-                                fb_ok, fb_msg, _ = recovery_coordinator.initiate_failback(config.peer_url)
-                                if fb_ok:
-                                    print("[Laptop Node] Failback completed! Laptop resumed PRIMARY_ACTIVE.", flush=True)
         except Exception:
             pass
+
+alert_dispatcher = EmailAlertDispatcher(
+    smtp_host=config.smtp_host,
+    smtp_port=config.smtp_port,
+    smtp_user=config.smtp_user,
+    smtp_password=config.smtp_password,
+    admin_email=config.admin_alert_email,
+    channel=config.alert_channel,
+)
+alert_worker = AlertOutboxWorker(
+    db=db,
+    dispatcher=alert_dispatcher,
+    node_id=config.node_id,
+    poll_interval=2.0,
+    max_per_hour=20,
+    max_per_day=100,
+)
 
 if "pytest" not in sys.modules and os.environ.get("SDR_TESTING") != "1":
     _hb_thread = threading.Thread(target=_laptop_background_worker, daemon=True)
     _hb_thread.start()
+    alert_worker.start()
 
 PORTFOLIO_HTML_PATH = os.path.join(BASE_DIR, "frontend", "portfolio.html")
 DASHBOARD_HTML_PATH = os.path.join(BASE_DIR, "frontend", "dashboard.html")
 
 app = FastAPI(title="SentinelDR Laptop Node", version="1.0.0", docs_url=None, redoc_url=None)
 
-# Permissive CORS for cross-device failover & failback
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
@@ -1015,6 +1101,56 @@ async def post_peer_failback(request: Request):
     return JSONResponse(status_code=200, content=make_success(data, config.node_id, state_machine.current_epoch))
 
 
+@app.post("/api/v1/admin/alerts/test")
+async def post_admin_alerts_test(request: Request):
+    """
+    Authenticated endpoint to test admin email alert delivery pipeline.
+    Enqueues and immediately attempts to process a TEST alert.
+    """
+    headers_dict = dict(request.headers)
+    if not verify_admin_key(headers_dict, config.admin_key):
+        return JSONResponse(
+            status_code=401,
+            content=make_error(ERR_UNAUTHORIZED, "Unauthorized admin access", config.node_id, state_machine.current_epoch)
+        )
+
+    now = time.time()
+    node_label = "Laptop Node"
+    title = "[TEST] SentinelDR Admin Alert Pipeline Test"
+    body = (
+        f"SentinelDR Operational Alert Pipeline Test\n"
+        f"==================================================\n"
+        f"Origin Node:  {node_label} (port {config.port})\n"
+        f"Severity:     INFO\n"
+        f"Timestamp:    {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(now))}\n"
+        f"Notice:       This is an authenticated TEST email verification.\n"
+        f"              If you received this on your Admin Device, the\n"
+        f"              outbox delivery worker and SMTP channel are fully\n"
+        f"              operational.\n"
+        f"=================================================="
+    )
+    alert_id = enqueue_alert(
+        db=db,
+        dedupe_key=f"test_alert_{int(now)}",
+        severity="INFO",
+        title=title,
+        body=body,
+        cooldown_seconds=0.0,
+        now=now
+    )
+    # Attempt immediate transmission of the queued alert
+    sent = alert_worker.process_pending(limit=1, now=now)
+
+    return JSONResponse(status_code=200, content=make_success({
+        "status": "SENT" if sent > 0 else "QUEUED",
+        "alert_id": alert_id,
+        "node": node_label,
+        "sent_immediately": sent > 0,
+        "recipient": config.admin_alert_email or "Not configured",
+        "message": "Test alert created and submitted to delivery pipeline."
+    }, config.node_id, state_machine.current_epoch))
+
+
 @app.get(ROUTE_PEER_CHANGES)
 async def get_peer_changes(request: Request, from_sequence: int = 0, limit: int = 50):
     headers_dict = dict(request.headers)
@@ -1125,6 +1261,13 @@ async def get_portfolio_contact():
     return JSONResponse(status_code=200, content=make_success(contact, config.node_id, config.epoch))
 
 
+@app.get("/api/v1/portfolio/resume")
+@app.get("/api/v1/resume")
+async def get_portfolio_resume():
+    resume = db.get_resume()
+    return JSONResponse(status_code=200, content=make_success(resume, config.node_id, config.epoch))
+
+
 @app.get("/api/v1/portfolio/inquiries")
 @app.get("/api/v1/inquiries")
 async def get_portfolio_inquiries():
@@ -1167,10 +1310,67 @@ async def post_portfolio_inquiry(inquiry: InquiryModel):
             content=make_error(err_code or "WRITE_FAILED", err_msg or "Write rejected", config.node_id, current_epoch)
         )
 
+    if ok:
+        threading.Thread(target=push_unreplicated_to_phone, daemon=True).start()
+
     return JSONResponse(status_code=201, content=make_success({
         "operation_id": op_id,
         "status": "PERSISTED_IN_OUTBOX",
         "message": "Inquiry accepted and queued for replication"
+    }, config.node_id, current_epoch))
+
+
+class ResumeModel(BaseModel):
+    name: str = "Dr. Dharshini"
+    title: str = "Senior Distributed Systems & Resilience Architect"
+    email: str = "dharshini.resilience@sentineldr.dev"
+    phone: str = "+1 (555) 019-2834"
+    location: str = "San Francisco, CA & Remote"
+    summary: str = ""
+    skills: str = ""
+    experience: str = ""
+    education: str = ""
+    template: str = "modern"
+
+
+@app.post("/api/v1/portfolio/resume", status_code=200)
+@app.post("/api/v1/resume", status_code=200)
+async def post_portfolio_resume(resume: ResumeModel):
+    is_primary = state_machine.is_writable()
+    current_epoch = state_machine.current_epoch
+
+    ok, err_code, err_msg, op_id = db.save_resume(
+        origin_node_id=config.node_id,
+        origin_epoch=current_epoch,
+        name=resume.name,
+        title=resume.title,
+        email=resume.email,
+        phone=resume.phone,
+        location=resume.location,
+        summary=resume.summary,
+        skills=resume.skills,
+        experience=resume.experience,
+        education=resume.education,
+        template=resume.template,
+        is_primary=is_primary,
+        cluster_id=config.cluster_id,
+        secret=config.hmac_secret
+    )
+
+    if not ok:
+        status_code = 403 if err_code == "FORBIDDEN" else 500
+        return JSONResponse(
+            status_code=status_code,
+            content=make_error(err_code or "WRITE_FAILED", err_msg or "Write rejected", config.node_id, current_epoch)
+        )
+
+    if ok:
+        threading.Thread(target=push_unreplicated_to_phone, daemon=True).start()
+
+    return JSONResponse(status_code=200, content=make_success({
+        "operation_id": op_id,
+        "status": "PERSISTED_IN_OUTBOX",
+        "message": "Resume updated and queued for replication"
     }, config.node_id, current_epoch))
 
 

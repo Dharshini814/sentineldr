@@ -28,6 +28,8 @@ wheels/
 .env
 *.env
 !.env.example
+!*.env.example
+!**/.env.example
 *.pem
 *.key
 *.cert
@@ -58,3 +60,4 @@ htmlcov/
 # Logs
 *.log
 logs/
+logs

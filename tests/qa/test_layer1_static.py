@@ -70,6 +70,11 @@ def audit_secret_scan():
     return not findings, findings
 
 def audit_report_generation():
+    """
+    Anti-Feature Scan:
+    Allowed: PLAIN-TEXT emails to the admin.
+    Forbidden: attachments, HTML email, file exports, downloadable reports, report endpoints, new libraries, paid services.
+    """
     pattern = re.compile(r'(?i)\b(?:report_gen|generate_report|pdf|csv|docx|reportlab|weasyprint|fpdf)\b')
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     matches = []

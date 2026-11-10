@@ -222,6 +222,12 @@ footer {
     border-top: 1px solid #1e293b;
 }
 
+@media(max-width: 900px) {
+    .resume-split-grid {
+        grid-template-columns: 1fr !important;
+    }
+}
+
 @media(max-width: 600px) {
     nav {
         flex-direction: column;
@@ -280,6 +286,7 @@ footer {
         <a href="#about">About</a>
         <a href="#skills">Skills</a>
         <a href="#projects">Projects</a>
+        <a href="#resume-builder" style="background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; padding: 4px 12px; border-radius: 6px; color: #38bdf8; font-weight: 600;">📝 Edit Resume</a>
         <a href="#contact">Contact & Inquiry</a>
         <a href="/dashboard.html" target="_blank" style="color: #38bdf8; font-weight: 600;">📊 Live Dashboard</a>
     </div>
@@ -293,7 +300,10 @@ footer {
     <p style="margin-top: 10px; color: #94a3b8; font-size: 15px;">
         Protected by <strong>SentinelDR</strong>: Automated active-standby disaster recovery across Laptop and Mobile Phone.
     </p>
-    <a href="#projects" class="btn">Explore My Work</a>
+    <div style="margin-top: 15px; display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="#projects" class="btn">Explore My Work</a>
+        <a href="#resume-builder" class="btn" style="background: transparent; border: 2px solid #38bdf8; color: #38bdf8;">📝 Edit Resume (Live Sync)</a>
+    </div>
 </div>
 
 <section id="about">
@@ -342,6 +352,194 @@ footer {
             <h3>PhishGuard</h3>
             <p>Intelligent security filter for detecting malicious links and phishing payloads in real time.</p>
         </div>
+    </div>
+</section>
+
+<!-- 3. Live Resume Editor & Cluster Synchronizer -->
+<section id="resume-builder" style="max-width: 1280px; margin: 40px auto; padding: 20px 5%;">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; margin-bottom: 25px;">
+        <div>
+            <h2 style="font-size: 28px; color: #f1f5f9; display: flex; align-items: center; gap: 10px;">
+                📝 Live Resume Editor &amp; Cluster Synchronizer
+            </h2>
+            <p style="color: #94a3b8; font-size: 14px; margin-top: 5px;">
+                Edit your resume beside an instant plain white sheet preview. Changes sync atomically across Laptop (:8000) and Phone (:8001).
+            </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <span id="resume-node-badge" style="background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; color: #4ade80; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-family: monospace;">
+                🟢 Active Node: Loading...
+            </span>
+            <span id="resume-sync-badge" style="background: rgba(56, 189, 248, 0.15); border: 1px solid #38bdf8; color: #38bdf8; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-family: monospace;">
+                ● Cluster Sync: Ready
+            </span>
+        </div>
+    </div>
+
+    <!-- Template Selection Bar -->
+    <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 14px 20px; margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <strong style="font-size: 13px; color: #e2e8f0;">Predefined Templates:</strong>
+            <button type="button" id="tpl-btn-modern" onclick="applyTemplatePreset('modern')" style="background: #0284c7; color: white; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
+                1. Modern Tech Architect
+            </button>
+            <button type="button" id="tpl-btn-security" onclick="applyTemplatePreset('security')" style="background: #334155; color: #cbd5e1; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
+                2. Cybersecurity &amp; DR Lead
+            </button>
+            <button type="button" id="tpl-btn-minimal" onclick="applyTemplatePreset('minimal')" style="background: #334155; color: #cbd5e1; border: none; padding: 6px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease;">
+                3. Minimalist Systems
+            </button>
+        </div>
+        <div style="font-size: 12px; color: #94a3b8; font-family: monospace;" id="resume-last-saved">
+            Auto-save: Armed (Keystroke &amp; Cluster Replication)
+        </div>
+    </div>
+
+    <!-- Split View Container -->
+    <div class="resume-split-grid" style="display: grid; grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.15fr); gap: 28px; align-items: start;">
+        
+        <!-- Left: Form Editor -->
+        <div style="background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 25px;">
+            <h3 style="color: #38bdf8; font-size: 18px; margin-bottom: 18px; border-bottom: 1px solid #334155; padding-bottom: 10px;">
+                Resume Information Form
+            </h3>
+            <form id="resumeForm" onsubmit="saveResumeManually(event)">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Full Name</label>
+                        <input type="text" id="res_name" required oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Professional Role / Headline</label>
+                        <input type="text" id="res_title" required oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Email Address</label>
+                        <input type="email" id="res_email" required oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Phone Number</label>
+                        <input type="text" id="res_phone" required oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Location</label>
+                    <input type="text" id="res_location" oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;">
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Executive / Professional Summary</label>
+                    <textarea id="res_summary" rows="3" oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px; line-height: 1.4;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Key Skills (comma or line separated)</label>
+                    <textarea id="res_skills" rows="3" oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Professional Experience &amp; Projects</label>
+                    <textarea id="res_experience" rows="5" oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;"></textarea>
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Education &amp; Credentials</label>
+                    <textarea id="res_education" rows="3" oninput="onResumeFieldInput()" style="width: 100%; padding: 8px 10px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 6px; font-size: 13px;"></textarea>
+                </div>
+
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button type="submit" id="btn-save-resume" style="flex: 1; min-width: 180px; background: #0284c7; color: #fff; font-weight: 700; border: none; padding: 11px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <span>💾</span> Save Resume &amp; Sync Cluster
+                    </button>
+                    <button type="button" onclick="loadDefaultTemplate()" style="background: transparent; border: 1px solid #475569; color: #94a3b8; padding: 11px 14px; border-radius: 6px; font-size: 13px; cursor: pointer;">
+                        Reset
+                    </button>
+                </div>
+                <div id="resume-save-toast" style="margin-top: 12px; font-size: 12px; padding: 8px 12px; border-radius: 6px; display: none;"></div>
+            </form>
+        </div>
+
+        <!-- Right: Plain White Sheet Preview -->
+        <div style="background: #090e1a; border: 1px solid #334155; border-radius: 10px; padding: 25px 20px; display: flex; flex-direction: column; align-items: center;">
+            <div style="width: 100%; max-width: 620px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding: 0 4px;">
+                <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 600;">
+                    📄 Live Document Preview (Plain White Sheet)
+                </span>
+                <span style="font-size: 11px; color: #22c55e; font-family: monospace;">
+                    ● Real-Time Rendering
+                </span>
+            </div>
+
+            <!-- The Plain White Sheet -->
+            <div id="resume-white-sheet" style="background: #ffffff !important; color: #0f172a !important; width: 100%; max-width: 620px; min-height: 820px; padding: 45px 40px; box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.2); border-radius: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.5; position: relative;">
+                
+                <!-- Sheet Header -->
+                <div style="border-bottom: 2px solid #0284c7; padding-bottom: 14px; margin-bottom: 18px;">
+                    <h1 id="sheet-name" style="font-size: 26px; font-weight: 800; color: #0f172a; margin: 0; line-height: 1.2;">
+                        Dr. Dharshini
+                    </h1>
+                    <div id="sheet-title" style="font-size: 14px; font-weight: 600; color: #0284c7; margin-top: 4px; letter-spacing: 0.5px;">
+                        Senior Distributed Systems &amp; Resilience Architect
+                    </div>
+                    <div id="sheet-contact" style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: #64748b; margin-top: 8px;">
+                        <span id="sheet-email">📧 dharshini.resilience@sentineldr.dev</span>
+                        <span id="sheet-phone">📞 +1 (555) 019-2834</span>
+                        <span id="sheet-location">📍 San Francisco, CA &amp; Remote</span>
+                    </div>
+                </div>
+
+                <!-- Section: Summary -->
+                <div style="margin-bottom: 18px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 8px;">
+                        Professional Summary
+                    </div>
+                    <p id="sheet-summary" style="font-size: 13px; color: #334155; line-height: 1.6; margin: 0;">
+                        Accomplished Distributed Systems Architect specializing in zero-data-loss failover architectures...
+                    </p>
+                </div>
+
+                <!-- Section: Skills -->
+                <div style="margin-bottom: 18px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 8px;">
+                        Core Competencies &amp; Technical Skills
+                    </div>
+                    <div id="sheet-skills" style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        <!-- Rendered skills badges -->
+                    </div>
+                </div>
+
+                <!-- Section: Experience -->
+                <div style="margin-bottom: 18px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 8px;">
+                        Professional Experience &amp; Architecture
+                    </div>
+                    <div id="sheet-experience" style="font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-line;">
+                        <!-- Rendered experience -->
+                    </div>
+                </div>
+
+                <!-- Section: Education -->
+                <div style="margin-bottom: 22px;">
+                    <div style="font-size: 11px; font-weight: 700; color: #1e293b; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; margin-bottom: 8px;">
+                        Education &amp; Credentials
+                    </div>
+                    <div id="sheet-education" style="font-size: 13px; color: #334155; line-height: 1.6; white-space: pre-line;">
+                        <!-- Rendered education -->
+                    </div>
+                </div>
+
+                <!-- Sheet Footer Watermark -->
+                <div style="position: absolute; bottom: 15px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 10px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+                    <span>🛡️ SentinelDR ACID Outbox Replication Active</span>
+                    <span id="sheet-watermark-node">Synchronized Document</span>
+                </div>
+            </div>
+        </div>
+
     </div>
 </section>
 
@@ -426,7 +624,384 @@ async function submitInquiry(e) {
     }
 }
 
-// --- 2. SentinelDR Sub-Second Auto-Redirect Watchdog ---
+// --- 2. Live Resume Editor & Cluster Synchronizer Logic ---
+const RESUME_PRESETS = {
+    modern: {
+        template: "modern",
+        name: "Dr. Dharshini",
+        title: "Senior Distributed Systems & Resilience Architect",
+        email: "dharshini.resilience@sentineldr.dev",
+        phone: "+1 (555) 019-2834",
+        location: "San Francisco, CA & Remote",
+        summary: "Accomplished Distributed Systems Architect specializing in zero-data-loss failover architectures, cross-tier transaction outbox replication, and hardware-constrained edge recovery nodes. Proven leader in designing sub-second disaster recovery failover systems.",
+        skills: "Active-Standby Clustering, Transactional Outbox, SQLite WAL Mode, PostgreSQL 16, Monotonic Replication, Split-Brain Fencing, Python 3.13, Network Partition Recovery",
+        experience: "• Principal Resilience Architect — SentinelDR Core (2024 - Present)\nArchitected cross-tier disaster recovery failover coordinator between primary laptop and edge smartphone standby. Enforced zero-gap outbox replication with cryptographic epoch leasing.\n\n• Senior Distributed Systems Engineer — CloudResilience Inc (2021 - 2024)\nEngineered high-throughput replication pipelines handling >25k transactions/sec with sub-millisecond WAL commits.",
+        education: "• M.S. Distributed Systems & High Availability — Stanford University (2021)\n• B.S. Computer Science & Software Engineering — UC Berkeley (2019)"
+    },
+    security: {
+        template: "security",
+        name: "Dharshini Dev",
+        title: "Lead Cybersecurity Architect & DR Specialist",
+        email: "dharshini.security@sentineldr.dev",
+        phone: "+1 (555) 773-4921",
+        location: "Boston, MA",
+        summary: "Specialist in hardened infrastructure, cryptographic lease fencing, HMAC-SHA256 authenticated peering, and fault-tolerant disaster recovery. Deep expertise in mitigating split-brain split-node states in mission-critical deployments.",
+        skills: "Cryptographic Fencing, HMAC-SHA256, Threat Modeling, Linux Kernel Namespaces, Failover Orchestration, Zero Trust Networking, Penetration Testing",
+        experience: "• Lead Security Architect — SentinelDR Systems (2023 - Present)\nImplemented non-bypassable write fencing with HMAC token rotation. Eliminated data corruption across unsynchronized cluster nodes.\n\n• Senior Security Engineer — CyberDefend Corp (2020 - 2023)\nConducted continuous red-team resilience testing against active-standby database failovers.",
+        education: "• M.S. Information Security & Privacy — Carnegie Mellon University (2020)\n• Certified Information Systems Security Professional (CISSP)"
+    },
+    minimal: {
+        template: "minimal",
+        name: "Dharshini",
+        title: "Full-Stack Reliability & Systems Engineer",
+        email: "dharshini.systems@sentineldr.dev",
+        phone: "+1 (555) 304-8192",
+        location: "Seattle, WA",
+        summary: "Hands-on engineer passionate about clean minimalist design, resilient backend microservices, and reliable state machine coordination across edge hardware and cloud servers.",
+        skills: "Python 3.13, SQLite, FastAPI, System Architecture, High Availability, Docker, CI/CD, Automated Testing",
+        experience: "• Systems Reliability Developer — CloudScale Solutions (2022 - Present)\nBuilt real-time document synchronization and multi-master replication buffers.\n\n• Software Engineer — Apex Core Tech (2019 - 2022)\nOptimized database write paths for low-latency durability and crash consistency.",
+        education: "• B.S. Software Engineering — University of Washington (2019)"
+    }
+};
+
+let currentResumeData = { ...RESUME_PRESETS.modern };
+let resumeDebounceTimer = null;
+
+function renderWhiteSheet(data) {
+    if (!data) return;
+    const nameEl = document.getElementById("sheet-name");
+    const titleEl = document.getElementById("sheet-title");
+    const emailEl = document.getElementById("sheet-email");
+    const phoneEl = document.getElementById("sheet-phone");
+    const locEl = document.getElementById("sheet-location");
+    const summaryEl = document.getElementById("sheet-summary");
+    const skillsContainer = document.getElementById("sheet-skills");
+    const expEl = document.getElementById("sheet-experience");
+    const eduEl = document.getElementById("sheet-education");
+
+    if (nameEl) nameEl.textContent = data.name || "Your Name";
+    if (titleEl) titleEl.textContent = data.title || "Professional Role / Headline";
+    if (emailEl) emailEl.textContent = `📧 ${data.email || 'email@example.com'}`;
+    if (phoneEl) phoneEl.textContent = `📞 ${data.phone || '+1 (555) 000-0000'}`;
+    if (locEl) locEl.textContent = `📍 ${data.location || 'Location'}`;
+    if (summaryEl) summaryEl.textContent = data.summary || "No professional summary provided.";
+
+    if (skillsContainer) {
+        skillsContainer.innerHTML = "";
+        const rawSkills = data.skills || "";
+        const skillList = rawSkills.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        if (skillList.length === 0) {
+            skillsContainer.innerHTML = "<span style='font-size: 12px; color: #94a3b8;'>No skills listed.</span>";
+        } else {
+            skillList.forEach(skill => {
+                const badge = document.createElement("span");
+                badge.style.cssText = "background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600;";
+                badge.textContent = skill;
+                skillsContainer.appendChild(badge);
+            });
+        }
+    }
+
+    if (expEl) expEl.textContent = data.experience || "No professional experience listed.";
+    if (eduEl) eduEl.textContent = data.education || "No education credentials listed.";
+
+    // Active node watermark
+    const isPhoneNode = (window.location.port === "8001" || window.location.hostname.includes("backup-origin"));
+    const wmNode = document.getElementById("sheet-watermark-node");
+    if (wmNode) {
+        wmNode.textContent = isPhoneNode ? "Node: Phone Standby (:8001)" : "Node: Laptop Primary (:8000)";
+    }
+}
+
+function syncFormToData() {
+    const data = {
+        id: "default_resume",
+        name: document.getElementById("res_name") ? document.getElementById("res_name").value : currentResumeData.name,
+        title: document.getElementById("res_title") ? document.getElementById("res_title").value : currentResumeData.title,
+        email: document.getElementById("res_email") ? document.getElementById("res_email").value : currentResumeData.email,
+        phone: document.getElementById("res_phone") ? document.getElementById("res_phone").value : currentResumeData.phone,
+        location: document.getElementById("res_location") ? document.getElementById("res_location").value : currentResumeData.location,
+        summary: document.getElementById("res_summary") ? document.getElementById("res_summary").value : currentResumeData.summary,
+        skills: document.getElementById("res_skills") ? document.getElementById("res_skills").value : currentResumeData.skills,
+        experience: document.getElementById("res_experience") ? document.getElementById("res_experience").value : currentResumeData.experience,
+        education: document.getElementById("res_education") ? document.getElementById("res_education").value : currentResumeData.education,
+        template: currentResumeData.template || "modern",
+        updated_at: Date.now() / 1000
+    };
+    currentResumeData = data;
+    return data;
+}
+
+function syncDataToForm(data) {
+    if (!data) return;
+    if (document.getElementById("res_name")) document.getElementById("res_name").value = data.name || "";
+    if (document.getElementById("res_title")) document.getElementById("res_title").value = data.title || "";
+    if (document.getElementById("res_email")) document.getElementById("res_email").value = data.email || "";
+    if (document.getElementById("res_phone")) document.getElementById("res_phone").value = data.phone || "";
+    if (document.getElementById("res_location")) document.getElementById("res_location").value = data.location || "";
+    if (document.getElementById("res_summary")) document.getElementById("res_summary").value = data.summary || "";
+    if (document.getElementById("res_skills")) document.getElementById("res_skills").value = data.skills || "";
+    if (document.getElementById("res_experience")) document.getElementById("res_experience").value = data.experience || "";
+    if (document.getElementById("res_education")) document.getElementById("res_education").value = data.education || "";
+}
+
+function onResumeFieldInput() {
+    const data = syncFormToData();
+    renderWhiteSheet(data);
+
+    // Save draft in localStorage immediately so mid-crash editing is NEVER lost
+    localStorage.setItem("sdr_resume_draft", JSON.stringify({ ...data, draft_time: Date.now() }));
+
+    const syncBadge = document.getElementById("resume-sync-badge");
+    if (syncBadge) {
+        syncBadge.style.background = "rgba(234, 179, 8, 0.15)";
+        syncBadge.style.borderColor = "#eab308";
+        syncBadge.style.color = "#fde047";
+        syncBadge.textContent = "● Unsaved edits (Local Draft)";
+    }
+
+    // Debounced automatic cluster save (fast 600ms debounce for rapid sync)
+    if (resumeDebounceTimer) clearTimeout(resumeDebounceTimer);
+    resumeDebounceTimer = setTimeout(() => {
+        saveResumeToServer(true);
+    }, 600);
+}
+
+async function saveResumeToServer(silent = false) {
+    const data = syncFormToData();
+    const btn = document.getElementById("btn-save-resume");
+    const toast = document.getElementById("resume-save-toast");
+    const syncBadge = document.getElementById("resume-sync-badge");
+    const lastSavedEl = document.getElementById("resume-last-saved");
+
+    if (!silent && btn) {
+        btn.disabled = true;
+        btn.innerHTML = "<span>⏳</span> Committing to Cluster ACID Database...";
+    }
+    if (syncBadge) {
+        syncBadge.style.background = "rgba(56, 189, 248, 0.15)";
+        syncBadge.style.borderColor = "#38bdf8";
+        syncBadge.style.color = "#38bdf8";
+        syncBadge.textContent = "● Committing...";
+    }
+
+    try {
+        const resp = await fetch("/api/v1/portfolio/resume", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        });
+        const resJson = await resp.json();
+
+        if (resp.ok && resJson.ok) {
+            const opId = resJson.data && resJson.data.operation_id ? resJson.data.operation_id : "local-commit";
+            const nowStr = new Date().toLocaleTimeString();
+
+            // Clear draft since server is committed
+            localStorage.setItem("sdr_resume_synced", JSON.stringify(data));
+            localStorage.removeItem("sdr_resume_draft");
+
+            if (syncBadge) {
+                syncBadge.style.background = "rgba(34, 197, 94, 0.15)";
+                syncBadge.style.borderColor = "#22c55e";
+                syncBadge.style.color = "#4ade80";
+                syncBadge.textContent = `● Synchronized to Cluster (${nowStr})`;
+            }
+            if (lastSavedEl) {
+                lastSavedEl.textContent = `Cluster Sync: Active (Op: ${opId.slice(0, 8)} at ${nowStr})`;
+            }
+
+            if (!silent && toast) {
+                toast.style.display = "block";
+                toast.style.background = "rgba(34, 197, 94, 0.2)";
+                toast.style.color = "#4ade80";
+                toast.style.border = "1px solid #22c55e";
+                toast.innerHTML = `<strong>Resume Synchronized!</strong> Persisted atomically &amp; queued in Outbox for peer replication.<br>Operation ID: <code>${opId}</code>`;
+                setTimeout(() => { toast.style.display = "none"; }, 5000);
+            }
+            return true;
+        } else {
+            const errMsg = resJson.error ? resJson.error.message : `HTTP ${resp.status}`;
+            if (syncBadge) {
+                syncBadge.style.background = "rgba(56, 189, 248, 0.15)";
+                syncBadge.style.borderColor = "#38bdf8";
+                syncBadge.style.color = "#38bdf8";
+                syncBadge.textContent = "● Standby Ready (Draft Preserved)";
+            }
+            if (!silent && toast) {
+                toast.style.display = "block";
+                toast.style.background = "rgba(56, 189, 248, 0.2)";
+                toast.style.color = "#38bdf8";
+                toast.style.border = "1px solid #38bdf8";
+                toast.innerHTML = `<strong>Cluster Standby:</strong> ${errMsg}<br><small>Your edits remain preserved in local storage and will automatically synchronize upon failover.</small>`;
+            }
+            return false;
+        }
+    } catch (err) {
+        if (syncBadge) {
+            syncBadge.style.background = "rgba(234, 179, 8, 0.15)";
+            syncBadge.style.borderColor = "#eab308";
+            syncBadge.style.color = "#fde047";
+            syncBadge.textContent = "● Reconnecting (Draft Preserved)";
+        }
+        if (!silent && toast) {
+            toast.style.display = "block";
+            toast.style.background = "rgba(234, 179, 8, 0.2)";
+            toast.style.color = "#fde047";
+            toast.innerHTML = `<strong>Network Exception:</strong> Reconnecting to active node. Your draft is preserved.`;
+        }
+        return false;
+    } finally {
+        if (!silent && btn) {
+            btn.disabled = false;
+            btn.innerHTML = "<span>💾</span> Save Resume &amp; Sync Cluster";
+        }
+    }
+}
+
+function saveResumeManually(e) {
+    if (e) e.preventDefault();
+    saveResumeToServer(false);
+}
+
+function applyTemplatePreset(presetKey) {
+    const preset = RESUME_PRESETS[presetKey];
+    if (!preset) return;
+    currentResumeData = { ...preset, updated_at: Date.now() / 1000 };
+    syncDataToForm(currentResumeData);
+    renderWhiteSheet(currentResumeData);
+
+    // Update active button state
+    ['modern', 'security', 'minimal'].forEach(k => {
+        const b = document.getElementById(`tpl-btn-${k}`);
+        if (b) {
+            if (k === presetKey) {
+                b.style.background = "#0284c7";
+                b.style.color = "#ffffff";
+            } else {
+                b.style.background = "#334155";
+                b.style.color = "#cbd5e1";
+            }
+        }
+    });
+
+    onResumeFieldInput();
+}
+
+function loadDefaultTemplate() {
+    applyTemplatePreset("modern");
+}
+
+async function loadResumeFromServer(force = true) {
+    // If not forced and user is actively focused on an input/textarea in the form, don't overwrite user's active typing
+    if (!force) {
+        const active = document.activeElement;
+        if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA") && active.form && active.form.id === "resumeForm") {
+            return;
+        }
+        const draftStr = localStorage.getItem("sdr_resume_draft");
+        if (draftStr) {
+            try {
+                const draft = JSON.parse(draftStr);
+                if (draft && draft.draft_time && (Date.now() - draft.draft_time < 3000)) {
+                    return;
+                }
+            } catch (e) {}
+        }
+    }
+
+    const isPhoneNode = (window.location.port === "8001" || window.location.hostname.includes("backup-origin"));
+    const nodeBadge = document.getElementById("resume-node-badge");
+
+    // Dynamically check node status for accurate badge description
+    let nodeRole = isPhoneNode ? "SECONDARY_STANDBY" : "PRIMARY_ACTIVE";
+    try {
+        const stResp = await fetch("/api/v1/status");
+        if (stResp.ok) {
+            const stJson = await stResp.json();
+            if (stJson.ok && stJson.data && stJson.data.role) {
+                nodeRole = stJson.data.role;
+            }
+        }
+    } catch (e) {}
+
+    if (nodeBadge) {
+        if (isPhoneNode) {
+            nodeBadge.style.background = "rgba(56, 189, 248, 0.15)";
+            nodeBadge.style.borderColor = "#38bdf8";
+            nodeBadge.style.color = "#38bdf8";
+            if (nodeRole === "SECONDARY_ACTIVE" || nodeRole === "PRIMARY_ACTIVE") {
+                nodeBadge.textContent = "⚡ Active Node: Phone Primary (:8001) [DR FAILOVER ACTIVE]";
+            } else {
+                nodeBadge.textContent = "📱 Active Node: Phone Standby (:8001) [STANDBY ONLINE]";
+            }
+        } else {
+            nodeBadge.style.background = "rgba(34, 197, 94, 0.15)";
+            nodeBadge.style.borderColor = "#22c55e";
+            nodeBadge.style.color = "#4ade80";
+            nodeBadge.textContent = "🟢 Active Node: Laptop Primary (:8000) [ONLINE]";
+        }
+    }
+
+    try {
+        const resp = await fetch("/api/v1/portfolio/resume");
+        if (resp.ok) {
+            const json = await resp.json();
+            if (json.ok && json.data) {
+                currentResumeData = json.data;
+            }
+        }
+    } catch (e) {
+        console.warn("[SentinelDR] Could not load resume from server:", e);
+    }
+
+    // Check if an uncommitted in-flight draft was passed via failover/failback handover URL
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlDraft = urlParams.get("draft");
+        if (urlDraft) {
+            const parsed = JSON.parse(decodeURIComponent(urlDraft));
+            if (parsed && parsed.name) {
+                console.log("[SentinelDR] Loaded in-flight draft from failover/failback handover URL");
+                currentResumeData = { ...currentResumeData, ...parsed };
+                setTimeout(() => { saveResumeToServer(true); }, 400);
+            }
+        }
+    } catch (e) {}
+
+    // Check if an uncommitted local draft exists from mid-keystroke crash
+    try {
+        const draftStr = localStorage.getItem("sdr_resume_draft");
+        if (draftStr) {
+            const draft = JSON.parse(draftStr);
+            if (draft && draft.name) {
+                console.log("[SentinelDR] Found uncommitted draft from before failover/refresh, merging...");
+                currentResumeData = { ...currentResumeData, ...draft };
+                // Automatically commit this draft to the active node we just landed on!
+                setTimeout(() => { saveResumeToServer(true); }, 500);
+            }
+        }
+    } catch (e) {}
+
+    syncDataToForm(currentResumeData);
+    renderWhiteSheet(currentResumeData);
+}
+
+// Initial load on page ready
+document.addEventListener("DOMContentLoaded", () => {
+    loadResumeFromServer(true);
+});
+// Fallback if DOMContentLoaded has already fired
+if (document.readyState === "complete" || document.readyState === "interactive") {
+    loadResumeFromServer(true);
+}
+
+// Live Cross-Cluster Poller: Continuously reflects edits between Laptop and Phone without manual page refresh
+setInterval(() => {
+    loadResumeFromServer(false);
+}, 2000);
+
+// --- 3. SentinelDR Sub-Second Auto-Redirect Watchdog ---
 (function() {
     "use strict";
 
@@ -477,14 +1052,48 @@ async function submitInquiry(e) {
         // We are on Phone Node
         banner.className = "dr-banner-phone";
         dot.className = "pulse-dot dot-blue";
-        title.textContent = isDomain 
-            ? "⚡ DISASTER RECOVERY ACTIVE: PHONE (backup-origin.sentineldr.in)" 
-            : "⚡ DISASTER RECOVERY ACTIVE: PHONE NODE (:8001)";
-        standbyInfo.innerHTML = "Primary Node Status: <strong id='laptop-status-text' style='color: #fca5a5;'>OFFLINE (Failover Engaged)</strong>";
-        badge.style.background = "rgba(56, 189, 248, 0.25)";
-        badge.style.borderColor = "#38bdf8";
-        badge.style.color = "#bae6fd";
-        badge.textContent = "DR ACTIVE (FAILOVER <1s)";
+        
+        async function updatePhoneBanner() {
+            try {
+                const sResp = await fetch("/api/v1/status");
+                if (sResp.ok) {
+                    const sJson = await sResp.json();
+                    const role = (sJson.ok && sJson.data && sJson.data.role) ? sJson.data.role : "SECONDARY_STANDBY";
+                    const isPromoted = (role === "SECONDARY_ACTIVE" || role === "PRIMARY_ACTIVE");
+                    if (isPromoted) {
+                        title.textContent = isDomain 
+                            ? "⚡ DISASTER RECOVERY ACTIVE: PHONE (backup-origin.sentineldr.in)" 
+                            : "⚡ DISASTER RECOVERY ACTIVE: PHONE NODE (:8001)";
+                        standbyInfo.innerHTML = "Primary Laptop Status: <strong id='laptop-status-text' style='color: #fca5a5;'>OFFLINE (Failover Engaged)</strong>";
+                        badge.style.background = "rgba(56, 189, 248, 0.25)";
+                        badge.style.borderColor = "#38bdf8";
+                        badge.style.color = "#bae6fd";
+                        badge.textContent = "DR ACTIVE (FAILOVER <1s)";
+                    } else {
+                        title.textContent = isDomain
+                            ? "📱 NODE: PHONE STANDBY (backup-origin.sentineldr.in)"
+                            : "📱 NODE: PHONE STANDBY (PORT 8001 — READY)";
+                        standbyInfo.innerHTML = "Node Status: <strong id='laptop-status-text' style='color: #4ade80;'>STANDBY READY (Listening)</strong>";
+                        badge.style.background = "rgba(34, 197, 94, 0.2)";
+                        badge.style.borderColor = "#22c55e";
+                        badge.style.color = "#4ade80";
+                        badge.textContent = "STANDBY READY";
+                    }
+                    return;
+                }
+            } catch (e) {}
+
+            title.textContent = isDomain 
+                ? "📱 NODE: PHONE (backup-origin.sentineldr.in)" 
+                : "📱 NODE: PHONE STANDBY (PORT 8001 — READY)";
+            standbyInfo.innerHTML = "Node Status: <strong id='laptop-status-text' style='color: #4ade80;'>ONLINE (PORT 8001)</strong>";
+            badge.style.background = "rgba(34, 197, 94, 0.2)";
+            badge.style.borderColor = "#22c55e";
+            badge.style.color = "#4ade80";
+            badge.textContent = "PHONE ONLINE";
+        }
+        updatePhoneBanner();
+        setInterval(updatePhoneBanner, 3000);
 
         // Read return URL from query param (?return_to=...) or default to saved laptop url
         const urlParams = new URLSearchParams(window.location.search);
@@ -555,9 +1164,12 @@ async function submitInquiry(e) {
                             if (overlay) overlay.style.display = "flex";
 
                             setTimeout(() => {
-                                const dest = isDomain 
-                                    ? "https://primary-origin.sentineldr.in/" 
-                                    : (returnUrl.endsWith("/") ? returnUrl : (returnUrl + "/"));
+                                const activeDraft = currentResumeData ? JSON.stringify(currentResumeData) : "";
+                                const draftParam = activeDraft ? `?draft=${encodeURIComponent(activeDraft)}` : "";
+                                const cleanBase = isDomain 
+                                    ? "https://primary-origin.sentineldr.in" 
+                                    : (returnUrl.replace(/\/+$/, ""));
+                                const dest = `${cleanBase}/${draftParam}`;
                                 window.location.replace(dest);
                             }, 350);
                             return;
@@ -582,7 +1194,7 @@ async function submitInquiry(e) {
             : "🟢 NODE: LAPTOP (PRIMARY ACTIVE — PORT 8000)";
         standbyInfo.innerHTML = `Standby DR Target: <strong id='dr-phone-target' style='color: #38bdf8;'>Connecting...</strong>`;
 
-        // 1. Discover the exact phone URL from server
+        // 1. Discover the exact phone URL from server & check online status
         async function syncDiscoveredPhone() {
             try {
                 // If accessed via Cloudflare domain, DR target is ALWAYS https://backup-origin.sentineldr.in
@@ -590,15 +1202,39 @@ async function submitInquiry(e) {
                     phoneUrl = "https://backup-origin.sentineldr.in";
                     localStorage.setItem("sdr_phone_url", phoneUrl);
                     updateTargetLabels();
-                    return;
+                } else {
+                    const res = await fetch("/api/v1/discovered-peer");
+                    if (res.ok) {
+                        const json = await res.json();
+                        if (json.ok && json.data && json.data.phone_url) {
+                            phoneUrl = json.data.phone_url;
+                            localStorage.setItem("sdr_phone_url", phoneUrl);
+                            updateTargetLabels();
+                        }
+                    }
                 }
-                const res = await fetch("/api/v1/discovered-peer");
-                if (res.ok) {
-                    const json = await res.json();
-                    if (json.ok && json.data && json.data.phone_url) {
-                        phoneUrl = json.data.phone_url;
-                        localStorage.setItem("sdr_phone_url", phoneUrl);
-                        updateTargetLabels();
+
+                // Actively probe phone reachability so user sees STANDBY ONLINE
+                try {
+                    const probeCtrl = new AbortController();
+                    const probeTid = setTimeout(() => probeCtrl.abort(), 800);
+                    const pResp = await fetch(`${phoneUrl.replace(/\/+$/, "")}/health`, { signal: probeCtrl.signal });
+                    clearTimeout(probeTid);
+                    const targetEl = document.getElementById("dr-phone-target");
+                    if (targetEl) {
+                        if (pResp.ok) {
+                            targetEl.style.color = "#4ade80";
+                            targetEl.textContent = `${phoneUrl} [ONLINE]`;
+                        } else {
+                            targetEl.style.color = "#38bdf8";
+                            targetEl.textContent = phoneUrl;
+                        }
+                    }
+                } catch (e) {
+                    const targetEl = document.getElementById("dr-phone-target");
+                    if (targetEl && !targetEl.textContent.includes("ONLINE")) {
+                        targetEl.style.color = "#94a3b8";
+                        targetEl.textContent = `${phoneUrl} [STANDBY WAITING]`;
                     }
                 }
             } catch (e) {}
@@ -652,10 +1288,12 @@ async function submitInquiry(e) {
                 const overlay = document.getElementById("failover-overlay");
                 if (overlay) overlay.style.display = "flex";
 
-                // On domain, route directly to https://backup-origin.sentineldr.in/
+                // Route to Phone Node carrying active in-flight draft
+                const activeDraft = currentResumeData ? JSON.stringify(currentResumeData) : "";
+                const draftParam = activeDraft ? `&draft=${encodeURIComponent(activeDraft)}` : "";
                 let dest = isDomain 
-                    ? "https://backup-origin.sentineldr.in/"
-                    : `${phoneUrl.replace(/\/+$/, "")}/?return_to=${encodeURIComponent(window.location.origin)}`;
+                    ? `https://backup-origin.sentineldr.in/?return_to=${encodeURIComponent(window.location.origin)}${draftParam}`
+                    : `${phoneUrl.replace(/\/+$/, "")}/?return_to=${encodeURIComponent(window.location.origin)}${draftParam}`;
 
                 setTimeout(() => {
                     window.location.replace(dest);

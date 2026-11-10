@@ -108,6 +108,13 @@ def dashboard_test_env(tmp_path_factory):
     laptop_server_mod.db.witness_secret = "test-witness-secret-dashboard"
     laptop_server_mod.db.seed_portfolio_data()
 
+    # Clear lingering test conflict records for clean status telemetry
+    import sqlite3
+    conn = sqlite3.connect(laptop_server_mod.db._sqlite_path)
+    conn.execute("DELETE FROM conflict_records")
+    conn.commit()
+    conn.close()
+
     # Pre-populate lease for Laptop
     laptop_lease_sig = sign_ownership_record(
         cluster_id=laptop_server_mod.config.cluster_id,

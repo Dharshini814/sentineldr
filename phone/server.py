@@ -66,6 +66,7 @@ from shared.protocol import (
     serialize_envelope,
 )
 from shared.replication import MAX_BODY_BYTES, validate_batch_request
+from shared.replication_worker import ReplicationClient
 from shared.security import (
     PersistentNonceCache,
     sanitize_for_audit_stream,
@@ -74,6 +75,14 @@ from shared.security import (
 )
 from shared.state_machine import ClusterStateMachine
 from shared.discovery import PhoneBeaconBroadcaster
+from shared.alerts import (
+    AlertOutboxWorker,
+    EmailAlertDispatcher,
+    enqueue_alert,
+    SEVERITY_INFO,
+    SEVERITY_WARNING,
+    SEVERITY_CRITICAL,
+)
 
 PORTFOLIO_HTML_PATH = os.path.join(BASE_DIR, "frontend", "portfolio.html")
 DASHBOARD_HTML_PATH = os.path.join(BASE_DIR, "frontend", "dashboard.html")
@@ -119,9 +128,12 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
         pass
 
     def _apply_cors_headers(self):
-        """Apply permissive CORS headers so Laptop and Dashboard browsers can fetch telemetry."""
-        origin = self.headers.get("Origin") or "*"
-        self.send_header("Access-Control-Allow-Origin", origin)
+        """Apply CORS headers restricted to ALLOWED_ORIGINS."""
+        origin = self.headers.get("Origin")
+        if origin and origin in ALLOWED_ORIGINS:
+            self.send_header("Access-Control-Allow-Origin", origin)
+        elif not origin:
+            self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "*")
 
@@ -214,6 +226,8 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             self.handle_get_certifications()
         elif path in ("/api/v1/portfolio/contact", "/api/v1/contact"):
             self.handle_get_contact()
+        elif path in ("/api/v1/portfolio/resume", "/api/v1/resume"):
+            self.handle_get_resume()
         elif path in ("/api/v1/portfolio/inquiries", "/api/v1/inquiries"):
             self.handle_get_inquiries()
 
@@ -249,10 +263,14 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             self.handle_peer_recovery_complete()
         elif path in (ROUTE_PEER_FAILBACK, "/api/v1/peer/failback"):
             self.handle_peer_failback()
+        elif path in ("/api/v1/admin/alerts/test", "/admin/alerts/test"):
+            self.handle_admin_alerts_test()
 
-        # 2. Protected Portfolio Inquiries
+        # 2. Protected Portfolio Inquiries & Resume
         elif path in ("/api/v1/portfolio/contact", "/api/v1/portfolio/inquiry", "/api/v1/contact"):
             self.handle_post_inquiry()
+        elif path in ("/api/v1/portfolio/resume", "/api/v1/resume"):
+            self.handle_post_resume()
 
         # 3. Unsupported Uploads
         elif path in ("/api/v1/portfolio/upload", "/api/v1/upload"):
@@ -1139,6 +1157,10 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             return
         self.send_envelope_response(200, make_success(contact, self.config.node_id, self.config.epoch))
 
+    def handle_get_resume(self):
+        resume = self.db.get_resume()
+        self.send_envelope_response(200, make_success(resume, self.config.node_id, self.config.epoch))
+
     def handle_get_inquiries(self):
         inquiries = self.db.get_inquiries()
         self.send_envelope_response(200, make_success({"inquiries": inquiries, "count": len(inquiries)}, self.config.node_id, self.config.epoch))
@@ -1170,6 +1192,28 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
         is_primary = self.state_machine.is_writable()
         current_epoch = self.state_machine.current_epoch
 
+        if not is_primary:
+            # Check if Laptop peer is unreachable; if so, trigger failover promotion so the outage write succeeds
+            laptop_reachable = False
+            try:
+                probe_req = urllib.request.Request(f"{self.config.peer_url}/health", method="GET")
+                with urllib.request.urlopen(probe_req, timeout=0.6) as p_resp:
+                    if p_resp.status == 200:
+                        laptop_reachable = True
+            except Exception:
+                laptop_reachable = False
+
+            if not laptop_reachable:
+                # Primary is down or standalone! Promote Phone to SECONDARY_ACTIVE
+                promo_ok, _ = self.state_machine.transition_to(
+                    STATE_SECONDARY_ACTIVE,
+                    reason="Failover: resume write accepted while Laptop is unreachable",
+                    new_epoch=self.state_machine.current_epoch + 1
+                )
+                if promo_ok:
+                    is_primary = True
+                    current_epoch = self.state_machine.current_epoch
+
         ok, err_code, err_msg, op_id = self.db.submit_inquiry(
             origin_node_id=self.config.node_id,
             origin_epoch=current_epoch,
@@ -1187,10 +1231,83 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             self.send_envelope_response(status_code, make_error(err_code or "WRITE_FAILED", err_msg or "Write rejected", self.config.node_id, current_epoch))
             return
 
+        if ok and hasattr(self.server, "push_unreplicated_to_laptop"):
+            threading.Thread(target=self.server.push_unreplicated_to_laptop, daemon=True).start()
+
         self.send_envelope_response(201, make_success({
             "operation_id": op_id,
             "status": "PERSISTED_IN_OUTBOX",
             "message": "Inquiry accepted and queued for replication"
+        }, self.config.node_id, current_epoch))
+
+    def handle_post_resume(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length <= 0:
+            self.send_envelope_response(400, make_error(ERR_BAD_REQUEST, "Missing request body", self.config.node_id, self.config.epoch))
+            return
+
+        body_bytes = self.rfile.read(content_length)
+        try:
+            payload = json.loads(body_bytes.decode("utf-8"))
+        except Exception:
+            self.send_envelope_response(400, make_error(ERR_BAD_REQUEST, "Malformed JSON payload", self.config.node_id, self.config.epoch))
+            return
+
+        is_primary = self.state_machine.is_writable()
+        current_epoch = self.state_machine.current_epoch
+
+        if not is_primary:
+            # Check if Laptop peer is unreachable; if so, trigger failover promotion so the outage write succeeds
+            laptop_reachable = False
+            try:
+                probe_req = urllib.request.Request(f"{self.config.peer_url}/health", method="GET")
+                with urllib.request.urlopen(probe_req, timeout=0.6) as p_resp:
+                    if p_resp.status == 200:
+                        laptop_reachable = True
+            except Exception:
+                laptop_reachable = False
+
+            if not laptop_reachable:
+                # Primary is down or standalone! Promote Phone to SECONDARY_ACTIVE
+                promo_ok, _ = self.state_machine.transition_to(
+                    STATE_SECONDARY_ACTIVE,
+                    reason="Failover: resume write accepted while Laptop is unreachable",
+                    new_epoch=self.state_machine.current_epoch + 1
+                )
+                if promo_ok:
+                    is_primary = True
+                    current_epoch = self.state_machine.current_epoch
+
+        ok, err_code, err_msg, op_id = self.db.save_resume(
+            origin_node_id=self.config.node_id,
+            origin_epoch=current_epoch,
+            name=payload.get("name", "Dr. Dharshini"),
+            title=payload.get("title", ""),
+            email=payload.get("email", ""),
+            phone=payload.get("phone", ""),
+            location=payload.get("location", ""),
+            summary=payload.get("summary", ""),
+            skills=payload.get("skills", ""),
+            experience=payload.get("experience", ""),
+            education=payload.get("education", ""),
+            template=payload.get("template", "modern"),
+            is_primary=is_primary,
+            cluster_id=self.config.cluster_id,
+            secret=self.config.hmac_secret
+        )
+
+        if not ok:
+            status_code = 403 if err_code == "FORBIDDEN" else 500
+            self.send_envelope_response(status_code, make_error(err_code or "WRITE_FAILED", err_msg or "Write rejected", self.config.node_id, current_epoch))
+            return
+
+        if ok and hasattr(self.server, "push_unreplicated_to_laptop"):
+            threading.Thread(target=self.server.push_unreplicated_to_laptop, daemon=True).start()
+
+        self.send_envelope_response(200, make_success({
+            "operation_id": op_id,
+            "status": "PERSISTED_IN_OUTBOX",
+            "message": "Resume updated and queued for replication"
         }, self.config.node_id, current_epoch))
 
     # --- Unsupported Feature Handlers ---
@@ -1218,6 +1335,56 @@ class PhoneRequestHandler(BaseHTTPRequestHandler):
             epoch=self.config.epoch
         )
         self.send_envelope_response(400, err)
+
+    def handle_admin_alerts_test(self):
+        """Authenticated endpoint to test admin email alert delivery from Phone Node."""
+        headers_dict = dict(self.headers)
+        if not verify_admin_key(headers_dict, self.config.admin_key):
+            self.send_envelope_response(
+                401,
+                make_error(ERR_UNAUTHORIZED, "Unauthorized admin access", self.config.node_id, self.state_machine.current_epoch)
+            )
+            return
+
+        now = time.time()
+        node_label = "Phone Node"
+        title = "[TEST] SentinelDR Admin Alert Pipeline Test"
+        body = (
+            f"SentinelDR Operational Alert Pipeline Test\n"
+            f"==================================================\n"
+            f"Origin Node:  {node_label} (port {self.config.port})\n"
+            f"Severity:     INFO\n"
+            f"Timestamp:    {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(now))}\n"
+            f"Notice:       This is an authenticated TEST email verification.\n"
+            f"              If you received this on your Admin Device, the\n"
+            f"              outbox delivery worker and SMTP channel are fully\n"
+            f"              operational on the Phone Node.\n"
+            f"=================================================="
+        )
+        alert_id = enqueue_alert(
+            db=self.db,
+            dedupe_key=f"test_alert_{int(now)}",
+            severity="INFO",
+            title=title,
+            body=body,
+            cooldown_seconds=0.0,
+            now=now
+        )
+        sent = 0
+        if hasattr(self.server, "alert_worker") and self.server.alert_worker:
+            sent = self.server.alert_worker.process_pending(limit=1, now=now)
+
+        self.send_envelope_response(
+            200,
+            make_success({
+                "status": "SENT" if sent > 0 else "QUEUED",
+                "alert_id": alert_id,
+                "node": node_label,
+                "sent_immediately": sent > 0,
+                "recipient": self.config.admin_alert_email or "Not configured",
+                "message": "Test alert created and submitted to delivery pipeline."
+            }, self.config.node_id, self.state_machine.current_epoch)
+        )
 
 
 class PhoneServer(ThreadingHTTPServer):
@@ -1249,6 +1416,24 @@ class PhoneServer(ThreadingHTTPServer):
             max_clock_skew=config.max_clock_skew,
         )
 
+        self.alert_dispatcher = EmailAlertDispatcher(
+            smtp_host=config.smtp_host,
+            smtp_port=config.smtp_port,
+            smtp_user=config.smtp_user,
+            smtp_password=config.smtp_password,
+            admin_email=config.admin_alert_email,
+            channel=config.alert_channel,
+        )
+        self.alert_worker = AlertOutboxWorker(
+            db=self.db,
+            dispatcher=self.alert_dispatcher,
+            node_id=config.node_id,
+            poll_interval=2.0,
+            max_per_hour=20,
+            max_per_day=100,
+        )
+        self.repl_client = ReplicationClient(secret=config.hmac_secret)
+
         import uuid
         self.db.log_audit_event(
             event_id=uuid.uuid4().hex,
@@ -1269,13 +1454,69 @@ class PhoneServer(ThreadingHTTPServer):
             self._beacon.start()
             self._monitor_thread = threading.Thread(target=self._auto_failover_monitor, daemon=True)
             self._monitor_thread.start()
+            self.alert_worker.start()
+
+    def push_unreplicated_to_laptop(self):
+        """Pushes any pending phone change_log entries to the Laptop node if online."""
+        try:
+            unrep = self.db.get_unreplicated_changes(peer_node_id="laptop", limit=50)
+            if not unrep:
+                return
+            from_seq = unrep[0]["sequence_number"]
+            batch_id = f"batch-phone-{uuid.uuid4().hex[:8]}"
+            repl_ok, resp_data, err = self.repl_client.replicate_batch(
+                peer_url=self.config.peer_url,
+                sender_node_id=self.config.node_id,
+                epoch=self.state_machine.current_epoch,
+                batch_id=batch_id,
+                from_sequence=from_seq,
+                events=unrep,
+                max_retries=1
+            )
+            if repl_ok and resp_data:
+                applied = resp_data.get("last_applied_sequence", unrep[-1]["sequence_number"])
+                last_op = unrep[-1].get("operation_id")
+                self.db.record_peer_ack("laptop", applied, last_op)
+            elif not repl_ok and err and "Sequence gap detected" in err:
+                curr_from = 1
+                while True:
+                    unrep_all = self.db.get_pending_replication_events(origin_node_id=self.config.node_id, from_sequence=curr_from, limit=50)
+                    if not unrep_all:
+                        break
+                    batch_id_gap = f"batch-phone-gap-{uuid.uuid4().hex[:8]}"
+                    ok_gap, resp_gap, _ = self.repl_client.replicate_batch(
+                        peer_url=self.config.peer_url,
+                        sender_node_id=self.config.node_id,
+                        epoch=self.state_machine.current_epoch,
+                        batch_id=batch_id_gap,
+                        from_sequence=curr_from,
+                        events=unrep_all,
+                        max_retries=1
+                    )
+                    if ok_gap and resp_gap:
+                        applied = resp_gap.get("last_applied_sequence", unrep_all[-1]["sequence_number"])
+                        last_op = unrep_all[-1].get("operation_id")
+                        self.db.record_peer_ack("laptop", applied, last_op)
+                        if applied >= unrep_all[-1]["sequence_number"]:
+                            curr_from = applied + 1
+                        else:
+                            break
+                    else:
+                        break
+        except Exception:
+            pass
 
     def _auto_failover_monitor(self):
         """Continuously checks for missed heartbeats from Laptop and auto-promotes after 3 misses."""
         while getattr(self, "_running", True):
             time.sleep(1.0)
             try:
-                if self.state_machine.current_state == STATE_SECONDARY_STANDBY:
+                # 1. If promoted, continuously push un-replicated changes to Laptop if it has recovered
+                if self.state_machine.current_state in (STATE_SECONDARY_ACTIVE, STATE_PRIMARY_ACTIVE):
+                    self.push_unreplicated_to_laptop()
+
+                # 2. If in standby, monitor Laptop heartbeats
+                elif self.state_machine.current_state == STATE_SECONDARY_STANDBY:
                     if self.heartbeat_tracker.last_received_at is not None:
                         misses = self.heartbeat_tracker.evaluate_misses()
                         if misses >= 3:
@@ -1295,6 +1536,12 @@ class PhoneServer(ThreadingHTTPServer):
     def stop(self):
         """Cleanly shutdown the HTTP server."""
         self._running = False
+        try:
+            if hasattr(self, "alert_worker") and self.alert_worker:
+                self.alert_worker.stop()
+                self.alert_worker.flush()
+        except Exception:
+            pass
         try:
             if self._beacon:
                 self._beacon.stop()

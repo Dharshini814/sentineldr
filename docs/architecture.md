@@ -183,11 +183,30 @@ sequenceDiagram
 
 ---
 
-## 6. Anti-Feature Verification
+## 6. Anti-Feature Verification & Alerting Policy
+
+### 6.1 Strict Alerting & Reporting Definition
+- **Allowed**: PLAIN-TEXT emails to the admin (`Admin Device`).
+- **Forbidden**: attachments, HTML email, file exports, downloadable reports, report endpoints, new libraries, paid services.
+
+### 6.2 Anti-Feature Status Table
 
 | Component | Status | Verification Mechanism |
 | :--- | :--- | :--- |
 | **PDF Reporting** | ABSENT | Codebase grep confirms zero imports of `reportlab`, `fpdf`, `weasyprint`. |
+| **HTML Emails / Rich Text** | ABSENT | Standard library `email.message.EmailMessage.set_content` plain-text only. |
+| **Email Attachments** | ABSENT | Zero attachment encoders or MIME attachments in alert dispatcher. |
 | **CSV Export Engine** | ABSENT | No CSV file generation endpoints exist on either node. |
 | **Docx / Office Generators** | ABSENT | No `python-docx` or office libraries present in dependencies or code. |
-| **Automated Report Schedulers** | ABSENT | Background tasks are strictly limited to heartbeat and outbox replication. |
+| **Downloadable Report Endpoints** | ABSENT | Only authenticated plain-text telemetry and JSON audit envelopes exist. |
+| **Paid Alerting Services** | ABSENT | Zero Twilio, PagerDuty, SendGrid, or commercial SDKs; uses standard SMTP. |
+
+---
+
+## 7. System Terminology
+
+| Term | Role | Execution Environment |
+| :--- | :--- | :--- |
+| **Laptop Node** | Primary cluster node (port 8000) | Windows 11 host (FastAPI, PostgreSQL/SQLite fallback) |
+| **Phone Node** | Standby disaster-recovery node (port 8001) | Android Termux environment (Python standard library only) |
+| **Admin Device** | Notification endpoint (reads emails via Gmail app) | Administrator's mobile device (runs no SentinelDR code) |

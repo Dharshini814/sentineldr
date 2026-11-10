@@ -24,7 +24,7 @@ if BASE_DIR not in sys.path:
 from phone.db import PhoneDatabase
 from shared.ownership import OwnershipRecord, sign_ownership_record
 
-def test_layer3_database():
+def run_layer3_database():
     print("=== LAYER 3 DATABASE POINT-TO-POINT AUDIT ===")
     results = []
 
@@ -186,5 +186,12 @@ def test_layer3_database():
 
     return results
 
+
+def test_layer3_database():
+    results = run_layer3_database()
+    failures = [r for r in results if r[2] == "FAIL"]
+    assert not failures, f"Layer 3 failures: {failures}"
+
+
 if __name__ == "__main__":
-    test_layer3_database()
+    run_layer3_database()

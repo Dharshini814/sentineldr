@@ -29,7 +29,7 @@ from shared.config import NodeConfig
 CLUSTER_ID = "sentineldr-cluster-01"
 SHARED_SECRET = "qa-shared-secret-key-67890"
 
-def test_layer7_portfolio_dashboard():
+def run_layer7_portfolio_dashboard():
     print("=== LAYER 7 PORTFOLIO PARITY & HONEST DASHBOARD AUDIT ===")
     results = []
 
@@ -160,5 +160,12 @@ def test_layer7_portfolio_dashboard():
     phone_srv.stop()
     return results
 
+
+def test_layer7_portfolio_dashboard():
+    results = run_layer7_portfolio_dashboard()
+    failures = [r for r in results if r[2] != "PASS"]
+    assert not failures, f"Layer 7 failures: {failures}"
+
+
 if __name__ == "__main__":
-    test_layer7_portfolio_dashboard()
+    run_layer7_portfolio_dashboard()
