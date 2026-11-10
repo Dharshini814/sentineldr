@@ -797,9 +797,9 @@ async function saveResumeToServer(silent = false) {
             const opId = resJson.data && resJson.data.operation_id ? resJson.data.operation_id : "local-commit";
             const nowStr = new Date().toLocaleTimeString();
 
-            // Clear draft since server is committed
+            // Preserve both draft and synced state so failover has full redundancy
             localStorage.setItem("sdr_resume_synced", JSON.stringify(data));
-            localStorage.removeItem("sdr_resume_draft");
+            localStorage.setItem("sdr_resume_draft", JSON.stringify(data));
 
             if (syncBadge) {
                 syncBadge.style.background = "rgba(34, 197, 94, 0.15)";
@@ -969,16 +969,15 @@ async function loadResumeFromServer(force = true) {
         }
     } catch (e) {}
 
-    // Check if an uncommitted local draft exists from mid-keystroke crash
+    // Check if local draft or synced cache exists from right before crash
     try {
-        const draftStr = localStorage.getItem("sdr_resume_draft");
+        const draftStr = localStorage.getItem("sdr_resume_draft") || localStorage.getItem("sdr_resume_synced");
         if (draftStr) {
             const draft = JSON.parse(draftStr);
-            if (draft && draft.name) {
-                console.log("[SentinelDR] Found uncommitted draft from before failover/refresh, merging...");
+            if (draft && draft.name && (!currentResumeData || !currentResumeData.updated_at || (draft.updated_at && draft.updated_at > currentResumeData.updated_at))) {
+                console.log("[SentinelDR] Merging latest saved draft from prior session...");
                 currentResumeData = { ...currentResumeData, ...draft };
-                // Automatically commit this draft to the active node we just landed on!
-                setTimeout(() => { saveResumeToServer(true); }, 500);
+                setTimeout(() => { saveResumeToServer(true); }, 400);
             }
         }
     } catch (e) {}
@@ -1202,6 +1201,11 @@ setInterval(() => {
                     phoneUrl = "https://backup-origin.sentineldr.in";
                     localStorage.setItem("sdr_phone_url", phoneUrl);
                     updateTargetLabels();
+                    fetch("/api/v1/peer/register", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ phone_url: phoneUrl })
+                    }).catch(() => {});
                 } else {
                     const res = await fetch("/api/v1/discovered-peer");
                     if (res.ok) {
@@ -1210,6 +1214,11 @@ setInterval(() => {
                             phoneUrl = json.data.phone_url;
                             localStorage.setItem("sdr_phone_url", phoneUrl);
                             updateTargetLabels();
+                            fetch("/api/v1/peer/register", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ phone_url: phoneUrl })
+                            }).catch(() => {});
                         }
                     }
                 }
@@ -1289,7 +1298,13 @@ setInterval(() => {
                 if (overlay) overlay.style.display = "flex";
 
                 // Route to Phone Node carrying active in-flight draft
-                const activeDraft = currentResumeData ? JSON.stringify(currentResumeData) : "";
+                let activeData = currentResumeData;
+                if (!activeData || !activeData.name) {
+                    try {
+                        activeData = JSON.parse(localStorage.getItem("sdr_resume_draft") || localStorage.getItem("sdr_resume_synced") || "null");
+                    } catch (e) {}
+                }
+                const activeDraft = activeData ? JSON.stringify(activeData) : "";
                 const draftParam = activeDraft ? `&draft=${encodeURIComponent(activeDraft)}` : "";
                 let dest = isDomain 
                     ? `https://backup-origin.sentineldr.in/?return_to=${encodeURIComponent(window.location.origin)}${draftParam}`

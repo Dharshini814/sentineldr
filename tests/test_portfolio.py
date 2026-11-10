@@ -501,3 +501,44 @@ def test_standby_phone_rejects_resume_write(phone_server_url):
     assert status == 403
     assert body["ok"] is False
     assert body["error"]["code"] == "FORBIDDEN"
+
+
+def test_laptop_to_phone_resume_sync_on_edit_before_failover(laptop_client, phone_server_url):
+    url, phone_config, phone_server = phone_server_url
+    from laptop.server import config, push_unreplicated_to_phone
+    from shared.seed_data import RESUME_SEED
+
+    # 1. Register peer URL with laptop
+    reg_resp = laptop_client.post("/api/v1/peer/register", json={"phone_url": url})
+    assert reg_resp.status_code == 200
+    assert config.peer_url == url
+
+    # 2. Edit resume on Laptop
+    edited_data = {
+        "name": "Dr. Dharshini (Laptop Live Edit)",
+        "title": "Principal Architect",
+        "email": "dharshini.laptop@sentineldr.dev",
+        "phone": "+1 (555) 123-4567",
+        "location": "Boston, MA",
+        "summary": "Edited on Laptop before sudden crash/failover.",
+        "skills": "Failover, Outbox, Replication",
+        "experience": "Lead Architect",
+        "education": "Distributed Systems",
+        "template": "modern"
+    }
+    lp_resp = laptop_client.post("/api/v1/portfolio/resume", json=edited_data)
+    assert lp_resp.status_code == 200
+
+    # Ensure replication pushed to Phone
+    push_unreplicated_to_phone()
+
+    # 3. Verify Phone Node immediately reflects the exact edited data!
+    st_ph, ph_get, _ = phone_request(url, "/api/v1/portfolio/resume")
+    assert st_ph == 200
+    assert ph_get["data"]["name"] == "Dr. Dharshini (Laptop Live Edit)"
+    assert ph_get["data"]["email"] == "dharshini.laptop@sentineldr.dev"
+    assert ph_get["data"]["phone"] == "+1 (555) 123-4567"
+
+    # Cleanup
+    laptop_client.post("/api/v1/portfolio/resume", json=RESUME_SEED)
+    push_unreplicated_to_phone()

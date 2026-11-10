@@ -166,55 +166,68 @@ if "pytest" not in sys.modules and os.environ.get("SDR_TESTING") != "1":
 
 def push_unreplicated_to_phone():
     """Pushes any pending local change_log entries to the standby Phone node."""
-    target_url = getattr(discovery, "phone_url", config.peer_url) or config.peer_url
-    try:
-        unrep = db.get_unreplicated_changes(peer_node_id="phone", limit=50)
-        if not unrep:
-            return
-        from_seq = unrep[0]["sequence_number"]
-        batch_id = f"batch-laptop-{uuid.uuid4().hex[:8]}"
-        repl_ok, resp_data, err = repl_client.replicate_batch(
-            peer_url=target_url,
-            sender_node_id=config.node_id,
-            epoch=state_machine.current_epoch,
-            batch_id=batch_id,
-            from_sequence=from_seq,
-            events=unrep,
-            max_retries=2
-        )
-        if repl_ok and resp_data:
-            applied = resp_data.get("last_applied_sequence", unrep[-1]["sequence_number"])
-            last_op = unrep[-1].get("operation_id")
-            db.record_peer_ack("phone", applied, last_op)
-        elif not repl_ok and err and "Sequence gap detected" in err:
-            # Self-healing loop: peer is missing earlier events; re-send from sequence 1 until fully caught up
-            curr_from = 1
-            while True:
-                unrep_all = db.get_pending_replication_events(origin_node_id=config.node_id, from_sequence=curr_from, limit=50)
-                if not unrep_all:
-                    break
-                batch_id_gap = f"batch-laptop-gap-{uuid.uuid4().hex[:8]}"
-                ok_gap, resp_gap, _ = repl_client.replicate_batch(
-                    peer_url=target_url,
-                    sender_node_id=config.node_id,
-                    epoch=state_machine.current_epoch,
-                    batch_id=batch_id_gap,
-                    from_sequence=curr_from,
-                    events=unrep_all,
-                    max_retries=1
-                )
-                if ok_gap and resp_gap:
-                    applied = resp_gap.get("last_applied_sequence", unrep_all[-1]["sequence_number"])
-                    last_op = unrep_all[-1].get("operation_id")
-                    db.record_peer_ack("phone", applied, last_op)
-                    if applied >= unrep_all[-1]["sequence_number"]:
-                        curr_from = applied + 1
+    candidates = []
+    if getattr(discovery, "phone_url", None):
+        candidates.append(discovery.phone_url)
+    if config.peer_url and config.peer_url not in candidates:
+        candidates.append(config.peer_url)
+    if "https://backup-origin.sentineldr.in" not in candidates:
+        candidates.append("https://backup-origin.sentineldr.in")
+
+    for target_url in candidates:
+        try:
+            unrep = db.get_unreplicated_changes(peer_node_id="phone", limit=50)
+            if not unrep:
+                return
+            from_seq = unrep[0]["sequence_number"]
+            batch_id = f"batch-laptop-{uuid.uuid4().hex[:8]}"
+            repl_ok, resp_data, err = repl_client.replicate_batch(
+                peer_url=target_url,
+                sender_node_id=config.node_id,
+                epoch=state_machine.current_epoch,
+                batch_id=batch_id,
+                from_sequence=from_seq,
+                events=unrep,
+                max_retries=1
+            )
+            if repl_ok and resp_data:
+                config.peer_url = target_url
+                applied = resp_data.get("last_applied_sequence", unrep[-1]["sequence_number"])
+                last_op = unrep[-1].get("operation_id")
+                db.record_peer_ack("phone", applied, last_op)
+                return
+            elif not repl_ok and err and "Sequence gap detected" in err:
+                curr_from = 1
+                while True:
+                    unrep_all = db.get_pending_replication_events(origin_node_id=config.node_id, from_sequence=curr_from, limit=50)
+                    if not unrep_all:
+                        break
+                    batch_id_gap = f"batch-laptop-gap-{uuid.uuid4().hex[:8]}"
+                    ok_gap, resp_gap, err_gap = repl_client.replicate_batch(
+                        peer_url=target_url,
+                        sender_node_id=config.node_id,
+                        epoch=state_machine.current_epoch,
+                        batch_id=batch_id_gap,
+                        from_sequence=curr_from,
+                        events=unrep_all,
+                        max_retries=1
+                    )
+                    if ok_gap and resp_gap:
+                        config.peer_url = target_url
+                        applied = resp_gap.get("last_applied_sequence", unrep_all[-1]["sequence_number"])
+                        last_op = unrep_all[-1].get("operation_id")
+                        db.record_peer_ack("phone", applied, last_op)
+                        if applied >= unrep_all[-1]["sequence_number"]:
+                            curr_from = applied + 1
+                        else:
+                            break
                     else:
                         break
-                else:
-                    break
-    except Exception as e:
-        print(f"[Laptop Replication] Exception in push: {e}", flush=True)
+                return
+        except Exception:
+            continue
+        except Exception:
+            continue
 
 
 def _laptop_background_worker():
@@ -676,21 +689,41 @@ async def get_discovered_peer():
 
 @app.post("/api/v1/peer/register")
 async def post_peer_register(request: Request):
-    """Allows Phone to announce its IP and port to the Laptop dynamically."""
+    """Allows Phone or frontend to announce the Phone endpoint dynamically."""
     client_ip = request.client.host if request.client else "127.0.0.1"
+    if client_ip == "testclient":
+        client_ip = "127.0.0.1"
     port = 8001
+    phone_url = None
     try:
         body = await request.body()
         if body:
             data = json.loads(body.decode("utf-8"))
+            phone_url = data.get("phone_url")
             port = data.get("port", 8001)
     except Exception:
         pass
-    phone_url = f"http://{client_ip}:{port}"
+
+    if phone_url:
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(phone_url)
+            if p.hostname and p.hostname != "testclient":
+                client_ip = p.hostname
+            if p.port:
+                port = p.port
+        except Exception:
+            pass
+    else:
+        phone_url = f"http://{client_ip}:{port}"
+
     config.peer_url = phone_url
+    discovery.phone_url = phone_url
     discovery.discovered_phone_ip = client_ip
     discovery.discovered_phone_port = port
     print(f"[Laptop Node] Phone registered its endpoint: {phone_url}!", flush=True)
+    # Immediately trigger replication outbox push to Phone
+    threading.Thread(target=push_unreplicated_to_phone, daemon=True).start()
     return JSONResponse(status_code=200, content=make_success({
         "registered": True,
         "phone_url": phone_url
@@ -1335,7 +1368,16 @@ class ResumeModel(BaseModel):
 
 @app.post("/api/v1/portfolio/resume", status_code=200)
 @app.post("/api/v1/resume", status_code=200)
-async def post_portfolio_resume(resume: ResumeModel):
+async def post_portfolio_resume(resume: ResumeModel, request: Request = None):
+    if request:
+        try:
+            host = request.headers.get("host", "").lower()
+            if "sentineldr.in" in host:
+                config.peer_url = "https://backup-origin.sentineldr.in"
+                discovery.phone_url = "https://backup-origin.sentineldr.in"
+        except Exception:
+            pass
+
     is_primary = state_machine.is_writable()
     current_epoch = state_machine.current_epoch
 

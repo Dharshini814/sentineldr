@@ -126,6 +126,19 @@ class PeerDiscoveryListener:
                 return f"http://{self.discovered_phone_ip}:{self.discovered_phone_port}"
             return "http://127.0.0.1:8001"
 
+    @phone_url.setter
+    def phone_url(self, val: str):
+        with self._lock:
+            try:
+                from urllib.parse import urlparse
+                p = urlparse(val)
+                if p.hostname:
+                    self.discovered_phone_ip = p.hostname
+                if p.port:
+                    self.discovered_phone_port = p.port
+            except Exception:
+                pass
+
     def start(self):
         self._running = True
         t_udp = threading.Thread(target=self._udp_listener_loop, daemon=True)
